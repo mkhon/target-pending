@@ -53,6 +53,9 @@ int iscsit_dump_data_payload(
 	u32 length, padding, offset = 0, size;
 	struct kvec iov;
 
+	if (conn->sess->sess_ops->RDMAExtentions)
+		return 0;
+
 	length = (buf_len > OFFLOAD_BUF_SIZE) ? OFFLOAD_BUF_SIZE : buf_len;
 
 	buf = kzalloc(length, GFP_ATOMIC);
@@ -999,10 +1002,7 @@ int iscsit_execute_cmd(struct iscsi_cmd *cmd, int ooo)
 			if (transport_check_aborted_status(se_cmd, 1) != 0)
 				return 0;
 
-			iscsit_set_dataout_sequence_values(cmd);
-			spin_lock_bh(&cmd->dataout_timeout_lock);
-			iscsit_start_dataout_timer(cmd, cmd->conn);
-			spin_unlock_bh(&cmd->dataout_timeout_lock);
+			iscsit_set_unsoliticed_dataout(cmd);
 		}
 		return transport_handle_cdb_direct(&cmd->se_cmd);
 
