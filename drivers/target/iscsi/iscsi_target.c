@@ -488,6 +488,8 @@ static struct iscsit_transport iscsi_target_transport = {
 	.iscsit_setup_np	= iscsit_setup_np,
 	.iscsit_accept_np	= iscsit_accept_np,
 	.iscsit_free_np		= iscsit_free_np,
+	.iscsit_alloc_cmd	= iscsit_alloc_cmd,
+	.iscsit_free_cmd	= iscsit_cache_free_cmd,
 	.iscsit_get_login_rx	= iscsit_get_login_rx,
 	.iscsit_put_login_tx	= iscsit_put_login_tx,
 };
