@@ -1967,24 +1967,8 @@ static void transport_release_cmd(struct se_cmd *cmd)
  */
 static void transport_put_cmd(struct se_cmd *cmd)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&cmd->t_state_lock, flags);
-	if (atomic_read(&cmd->t_fe_count) &&
-	    !atomic_dec_and_test(&cmd->t_fe_count)) {
-		spin_unlock_irqrestore(&cmd->t_state_lock, flags);
-		return;
-	}
-
-	if (cmd->transport_state & CMD_T_DEV_ACTIVE) {
-		cmd->transport_state &= ~CMD_T_DEV_ACTIVE;
-		target_remove_from_state_list(cmd);
-	}
-	spin_unlock_irqrestore(&cmd->t_state_lock, flags);
-
 	transport_free_pages(cmd);
 	transport_release_cmd(cmd);
-	return;
 }
 
 void *transport_kmap_data_sg(struct se_cmd *cmd)
@@ -2100,9 +2084,6 @@ transport_generic_new_cmd(struct se_cmd *cmd)
 		if (ret < 0)
 			return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
-
-	atomic_inc(&cmd->t_fe_count);
-
 	/*
 	 * If this command is not a write we can execute it right here,
 	 * for write buffers we need to notify the fabric driver first
