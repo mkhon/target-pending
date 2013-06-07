@@ -407,4 +407,8 @@ config OID_REGISTRY
 config UCS2_STRING
         tristate
 
+config PERCPU_TAG
+	boolean
+	default y
+
 endmenu
