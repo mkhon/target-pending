@@ -84,6 +84,7 @@ struct target_core_fabric_ops {
 };
 
 struct se_session *transport_init_session(void);
+struct se_session *transport_init_session_tagpool(unsigned int, unsigned int);
 void	__transport_register_session(struct se_portal_group *,
 		struct se_node_acl *, struct se_session *, void *);
 void	transport_register_session(struct se_portal_group *,
