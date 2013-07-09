@@ -201,10 +201,10 @@ static struct ipath_devdata *ipath_alloc_devdata(struct pci_dev *pdev)
 	}
 	dd->ipath_unit = -1;
 
-	idr_preload(GFP_KERNEL);
+	idr_preload(&unit_table, 0, GFP_KERNEL);
 	spin_lock_irqsave(&ipath_devs_lock, flags);
 
-	ret = idr_alloc(&unit_table, dd, 0, 0, GFP_NOWAIT);
+	ret = idr_alloc(&unit_table, dd, GFP_NOWAIT);
 	if (ret < 0) {
 		printk(KERN_ERR IPATH_DRV_NAME
 		       ": Could not allocate unit ID: error %d\n", -ret);

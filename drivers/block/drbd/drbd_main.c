@@ -500,7 +500,7 @@ int conn_lowest_minor(struct drbd_tconn *tconn)
 	int vnr = 0, m;
 
 	rcu_read_lock();
-	mdev = idr_get_next(&tconn->volumes, &vnr);
+	mdev = idr_find_next(&tconn->volumes, &vnr);
 	m = mdev ? mdev_to_minor(mdev) : -1;
 	rcu_read_unlock();
 
@@ -2675,7 +2675,8 @@ enum drbd_ret_code conn_new_minor(struct drbd_tconn *tconn, unsigned int minor, 
 	mdev->read_requests = RB_ROOT;
 	mdev->write_requests = RB_ROOT;
 
-	minor_got = idr_alloc(&minors, mdev, minor, minor + 1, GFP_KERNEL);
+	minor_got = idr_alloc_range(&minors, mdev, minor,
+				    minor + 1, GFP_KERNEL);
 	if (minor_got < 0) {
 		if (minor_got == -ENOSPC) {
 			err = ERR_MINOR_EXISTS;
@@ -2684,7 +2685,8 @@ enum drbd_ret_code conn_new_minor(struct drbd_tconn *tconn, unsigned int minor, 
 		goto out_no_minor_idr;
 	}
 
-	vnr_got = idr_alloc(&tconn->volumes, mdev, vnr, vnr + 1, GFP_KERNEL);
+	vnr_got = idr_alloc_range(&tconn->volumes, mdev,
+				  vnr, vnr + 1, GFP_KERNEL);
 	if (vnr_got < 0) {
 		if (vnr_got == -ENOSPC) {
 			err = ERR_INVALID_REQUEST;

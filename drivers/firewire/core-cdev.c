@@ -490,14 +490,13 @@ static int add_client_resource(struct client *client,
 	int ret;
 
 	if (preload)
-		idr_preload(gfp_mask);
+		idr_preload(&client->resource_idr, 0, gfp_mask);
 	spin_lock_irqsave(&client->lock, flags);
 
 	if (client->in_shutdown)
 		ret = -ECANCELED;
 	else
-		ret = idr_alloc(&client->resource_idr, resource, 0, 0,
-				GFP_NOWAIT);
+		ret = idr_alloc(&client->resource_idr, resource, GFP_NOWAIT);
 	if (ret >= 0) {
 		resource->handle = ret;
 		client_get(client);

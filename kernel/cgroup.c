@@ -190,8 +190,6 @@ static LIST_HEAD(roots);
 static int root_count;
 
 static DEFINE_IDA(hierarchy_ida);
-static int next_hierarchy_id;
-static DEFINE_SPINLOCK(hierarchy_id_lock);
 
 /* dummytop is a shorthand for the dummy hierarchy's top cgroup */
 #define dummytop (&rootnode.top_cgroup)
@@ -848,7 +846,7 @@ static void cgroup_free_fn(struct work_struct *work)
 	 */
 	dput(cgrp->parent->dentry);
 
-	ida_simple_remove(&cgrp->root->cgroup_ida, cgrp->id);
+	ida_remove(&cgrp->root->cgroup_ida, cgrp->id);
 
 	/*
 	 * Drop the active superblock reference that we took when we
@@ -1428,26 +1426,11 @@ static void init_cgroup_root(struct cgroupfs_root *root)
 
 static bool init_root_id(struct cgroupfs_root *root)
 {
-	int ret = 0;
+	int ret = ida_alloc(&hierarchy_ida, GFP_KERNEL);
+	if (ret < 0)
+		return false;
 
-	do {
-		if (!ida_pre_get(&hierarchy_ida, GFP_KERNEL))
-			return false;
-		spin_lock(&hierarchy_id_lock);
-		/* Try to allocate the next unused ID */
-		ret = ida_get_new_above(&hierarchy_ida, next_hierarchy_id,
-					&root->hierarchy_id);
-		if (ret == -ENOSPC)
-			/* Try again starting from 0 */
-			ret = ida_get_new(&hierarchy_ida, &root->hierarchy_id);
-		if (!ret) {
-			next_hierarchy_id = root->hierarchy_id + 1;
-		} else if (ret != -EAGAIN) {
-			/* Can only get here if the 31-bit IDR is full ... */
-			BUG_ON(ret);
-		}
-		spin_unlock(&hierarchy_id_lock);
-	} while (ret);
+	root->hierarchy_id = ret;
 	return true;
 }
 
@@ -1506,9 +1489,7 @@ static void cgroup_drop_root(struct cgroupfs_root *root)
 		return;
 
 	BUG_ON(!root->hierarchy_id);
-	spin_lock(&hierarchy_id_lock);
 	ida_remove(&hierarchy_ida, root->hierarchy_id);
-	spin_unlock(&hierarchy_id_lock);
 	ida_destroy(&root->cgroup_ida);
 	kfree(root);
 }
@@ -4120,7 +4101,7 @@ static long cgroup_create(struct cgroup *parent, struct dentry *dentry,
 		goto err_free_cgrp;
 	rcu_assign_pointer(cgrp->name, name);
 
-	cgrp->id = ida_simple_get(&root->cgroup_ida, 1, 0, GFP_KERNEL);
+	cgrp->id = ida_alloc_range(&root->cgroup_ida, 1, 0, GFP_KERNEL);
 	if (cgrp->id < 0)
 		goto err_free_name;
 
@@ -4229,7 +4210,7 @@ err_free_all:
 	/* Release the reference count that we took on the superblock */
 	deactivate_super(sb);
 err_free_id:
-	ida_simple_remove(&root->cgroup_ida, cgrp->id);
+	ida_remove(&root->cgroup_ida, cgrp->id);
 err_free_name:
 	kfree(rcu_dereference_raw(cgrp->name));
 err_free_cgrp:
@@ -5162,9 +5143,7 @@ void free_css_id(struct cgroup_subsys *ss, struct cgroup_subsys_state *css)
 
 	rcu_assign_pointer(id->css, NULL);
 	rcu_assign_pointer(css->id, NULL);
-	spin_lock(&ss->id_lock);
 	idr_remove(&ss->idr, id->id);
-	spin_unlock(&ss->id_lock);
 	kfree_rcu(id, rcu_head);
 }
 EXPORT_SYMBOL_GPL(free_css_id);
@@ -5186,12 +5165,8 @@ static struct css_id *get_new_cssid(struct cgroup_subsys *ss, int depth)
 	if (!newid)
 		return ERR_PTR(-ENOMEM);
 
-	idr_preload(GFP_KERNEL);
-	spin_lock(&ss->id_lock);
 	/* Don't use 0. allocates an ID of 1-65535 */
-	ret = idr_alloc(&ss->idr, newid, 1, CSS_ID_MAX + 1, GFP_NOWAIT);
-	spin_unlock(&ss->id_lock);
-	idr_preload_end();
+	ret = idr_alloc_range(&ss->idr, newid, 1, CSS_ID_MAX + 1, GFP_KERNEL);
 
 	/* Returns error when there are no free spaces for new ID.*/
 	if (ret < 0)
@@ -5211,7 +5186,6 @@ static int __init_or_module cgroup_init_idr(struct cgroup_subsys *ss,
 {
 	struct css_id *newid;
 
-	spin_lock_init(&ss->id_lock);
 	idr_init(&ss->idr);
 
 	newid = get_new_cssid(ss, 0);

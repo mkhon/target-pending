@@ -91,7 +91,7 @@ EXPORT_SYMBOL_GPL(mtd_table_mutex);
 
 struct mtd_info *__mtd_next_device(int i)
 {
-	return idr_get_next(&mtd_idr, &i);
+	return idr_find_next(&mtd_idr, &i);
 }
 EXPORT_SYMBOL_GPL(__mtd_next_device);
 
@@ -347,7 +347,7 @@ int add_mtd_device(struct mtd_info *mtd)
 	BUG_ON(mtd->writesize == 0);
 	mutex_lock(&mtd_table_mutex);
 
-	i = idr_alloc(&mtd_idr, mtd, 0, 0, GFP_KERNEL);
+	i = idr_alloc(&mtd_idr, mtd, GFP_KERNEL);
 	if (i < 0)
 		goto fail_locked;
 
