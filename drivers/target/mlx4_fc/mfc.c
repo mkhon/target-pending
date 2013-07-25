@@ -1404,7 +1404,7 @@ static struct mlx4_interface mfc_interface;
 int mfc_init_port(struct mfc_dev *mfc_dev, int port)
 {
 	struct mfc_port *mfc_port = &mfc_dev->mfc_port[port];
-	u64 wwn, wwpn;
+	u64 wwn;
 	int err = 0;
 	struct mfc_basic_config_params params = { 0 };
 	int count = 0;
@@ -1423,17 +1423,22 @@ int mfc_init_port(struct mfc_dev *mfc_dev, int port)
 	mfc_port->log_num_fexch_per_vhba = mfc_log_exch_per_vhba;
 
 	wwn = mfc_dev->dev->caps.def_mac[port];
-	wwpn = wwn | ((u64) 0x20) << 56;
 	u64_to_mac(mfc_port->def_mac, wwn);
-	u64_to_wwpn(mfc_port->def_wwpn, wwpn);
 
-	printk("mfc_init_port def_mac: %x:%x:%x:%x:%x:%x\n", mfc_port->def_mac[0],
+	snprintf(mfc_port->wwpn, 32, "20:00:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x",
+		mfc_port->def_mac[0],
 		mfc_port->def_mac[1], mfc_port->def_mac[2], mfc_port->def_mac[3],
 		mfc_port->def_mac[4], mfc_port->def_mac[5]);
-	printk("mfc_init_port_def_wwpn %x:%x:%x:%x:%x:%x:%x:%x\n", mfc_port->def_wwpn[0],
-		mfc_port->def_wwpn[1], mfc_port->def_wwpn[2], mfc_port->def_wwpn[3],
-		mfc_port->def_wwpn[4], mfc_port->def_wwpn[5], mfc_port->def_wwpn[6],
-		mfc_port->def_wwpn[7]);
+#if 0
+	printk("mfc_init_port_def_wwpn %x:%x:%x:%x:%x:%x:%x:%x\n", def_wwpn[0],
+		def_wwpn[1], def_wwpn[2], def_wwpn[3],
+		def_wwpn[4], def_wwpn[5], def_wwpn[6], def_wwpn[7]);
+
+	snprintf(mfc_port->wwpn, 16, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
+		def_wwpn[0], def_wwpn[1], def_wwpn[2], def_wwpn[3],
+		def_wwpn[4], def_wwpn[5], def_wwpn[6], def_wwpn[7]);
+#endif
+	printk("mfc_init_port: wwpn: %s\n", mfc_port->wwpn);
 
 	err = mlx4_qp_reserve_range(mfc_dev->dev, mfc_port->num_fexch_qps,
 				    MFC_MAX_PORT_FEXCH,
@@ -1600,6 +1605,13 @@ void mfc_free_port(struct mfc_dev *mfc_dev, int port)
 	struct mfc_port *fc_port = &mfc_dev->mfc_port[port];
 	struct mfc_vhba *vhba, *tmp;
 
+	printk("Entering mfc_free_port: mfc_dev: %p port: %d\n", mfc_dev, port);
+
+	if (!fc_port->initialized) {
+		printk("Skipping !fc_port->initialized\n");
+		return;
+	}
+
 	if (fip_ctlrs[fc_port->net_type - 1].rem_port)
 		fip_ctlrs[fc_port->net_type - 1].rem_port(fc_port);
 
@@ -1634,6 +1646,41 @@ void mfc_free_port(struct mfc_dev *mfc_dev, int port)
 
 	destroy_workqueue(fc_port->rfci_wq);
 	destroy_workqueue(fc_port->async_wq);
+}
+
+struct mfc_port *mlx4_fc_get_port_by_wwpn(const char *wwpn)
+{
+	struct mfc_dev *mfc_dev;
+	struct mfc_port *mfc_port;
+	int port;
+
+	mutex_lock(&mfc_dev_list_lock);
+	list_for_each_entry(mfc_dev, &mfc_dev_list, list) {
+		for (port = 1; port <= mfc_dev->dev->caps.num_ports; port++) {
+			mfc_port = &mfc_dev->mfc_port[port];
+			if (!mfc_port->initialized)
+				continue;
+#if 0
+			printk("mfc_port: %x:%x:%x:%x:%x:%x:%x:%x\n", mfc_port->def_wwpn[0],
+		               mfc_port->def_wwpn[1], mfc_port->def_wwpn[2], mfc_port->def_wwpn[3],
+		               mfc_port->def_wwpn[4], mfc_port->def_wwpn[5], mfc_port->def_wwpn[6],
+		               mfc_port->def_wwpn[7]);
+			printk("mfc_port: %s\n", mfc_port->def_wwpn);
+			printk("wwpn: %s\n", wwpn);
+#if 0
+			printk("passed wwpn:  %x:%x:%x:%x:%x:%x:%x:%x\n", wwpn[0],
+				wwpn[1],wwpn[2],wwpn[3],wwpn[4],wwpn[5],wwpn[6],wwpn[7]);
+#endif
+#endif
+			if (!strcmp(mfc_port->wwpn, wwpn)) {
+				mutex_unlock(&mfc_dev_list_lock);
+				return mfc_port;
+			}
+		}
+	}
+	mutex_unlock(&mfc_dev_list_lock);
+
+	return NULL;
 }
 
 void mlx4_fc_rescan_ports(enum mfc_net_type net_type)
@@ -1709,6 +1756,7 @@ static void *mfc_add_dev(struct mlx4_dev *dev)
 		dev_err(&dev->pdev->dev, "Alloc mfc_dev failed\n");
 		goto err_out;
 	}
+	INIT_LIST_HEAD(&mfc_dev->list);
 
 	mfc_dev->idx = mfc_dev_idx++;
 
@@ -1772,6 +1820,8 @@ static void *mfc_add_dev(struct mlx4_dev *dev)
 		err = mfc_init_port(mfc_dev, port);
 		if (err)
 			goto err_free_ports;
+#warning FIXME: Single port usage in mfc_add_dev()
+		break;
 	}
 
 	mutex_lock(&mfc_dev_list_lock);
@@ -2027,21 +2077,24 @@ static int __init mfc_init(void)
 		mfc_payload_size = 2112;
 	}
 
-//	if (scst_register_target_template(&mfct_tgt_templete) < 0) {
-//		return  -ENODEV;
-//	}
-
 	mutex_init(&mfc_dev_list_lock);
 	mfc_transport_template = fc_attach_transport(&mfc_transport_function);
 	if (mfc_transport_template == NULL) {
 		printk(KERN_ERR PFX "Fail to attach fc transport");
 		return -1;
 	}
-
+#if 0
 	mfc_sysfs_setup();
+#endif
+	err = mlx4_fc_register_configfs();
+	if (err < 0) {
+		fc_release_transport(mfc_transport_template);
+		return err;
+	}
 
 	err = mlx4_register_interface(&mfc_interface);
 	if (err) {
+		mlx4_fc_deregister_configfs();
 		fc_release_transport(mfc_transport_template);
 		return err;
 	}
@@ -2054,9 +2107,10 @@ static void __exit mfc_cleanup(void)
 //	scst_unregister_target_template(&mfct_tgt_templete);
 
 	mlx4_unregister_interface(&mfc_interface);
-
+#if 0
 	mfc_sysfs_cleanup();
-
+#endif
+	mlx4_fc_deregister_configfs();
 	fc_release_transport(mfc_transport_template);
 }
 

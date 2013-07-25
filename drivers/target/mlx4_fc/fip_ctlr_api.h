@@ -50,6 +50,7 @@ struct mfc_fip_ctlr {
 void mlx4_fc_register_fip_ctlr(struct mfc_fip_ctlr *mlx4_fip, enum mfc_net_type net_type);
 void mlx4_fc_deregister_fip_ctlr(enum mfc_net_type net_type);
 void mlx4_fc_rescan_ports(enum mfc_net_type net_type);
+struct mfc_port *mlx4_fc_get_port_by_wwpn(const char *wwpn);
 
 struct mfc_vhba *mfc_create_vhba_fcoe(struct mfc_port *mfc_port, int vlan_id,
 		int mtu, int priv_size, struct module *owner);

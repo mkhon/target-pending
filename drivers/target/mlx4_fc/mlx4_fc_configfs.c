@@ -17,7 +17,10 @@
 #include <target/target_core_fabric_configfs.h>
 #include <target/target_core_configfs.h>
 #include <target/configfs_macros.h>
-
+#if 1
+#include "mfc.h"
+#include "fip_ctlr_api.h"
+#endif
 #include "mlx4_fc_base.h"
 #include "mlx4_fc_fabric.h"
 
@@ -119,6 +122,7 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 	const char *name)
 {
 	struct mlx4_fc_port *port;
+	struct mfc_port *mfc_port;
 	u64 wwpn = 0;
 
 	/* if (mlx4_fc_parse_wwn(name, &wwpn, 1) < 0)
@@ -131,6 +135,15 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 	}
 	port->port_wwpn = wwpn;
 	/* mlx4_fc_format_wwn(&port->port_name[0], MLX4_FC_NAMELEN, wwpn); */
+
+	mfc_port = mlx4_fc_get_port_by_wwpn(name);
+	if (!mfc_port) {
+		kfree(port);
+		return ERR_PTR(-EINVAL);
+	}
+	port->mfc_port = mfc_port;
+
+	printk("Using mfc_port for configfs_wwpn %s\n", mfc_port->wwpn);
 
 	return &port->port_wwn;
 }
@@ -147,10 +160,9 @@ static ssize_t mlx4_fc_wwn_show_attr_version(
 	char *page)
 {
 	return sprintf(page, "MLX4_FC fabric module %s on %s/%s"
-		"on "UTS_RELEASE"\n", MLX4_FC_VERSION, utsname()->sysname,
+		" on "UTS_RELEASE"\n", MLX4_FC_VERSION, utsname()->sysname,
 		utsname()->machine);
 }
-
 TF_WWN_ATTR_RO(mlx4_fc, version);
 
 static struct configfs_attribute *mlx4_fc_wwn_attrs[] = {
@@ -202,7 +214,7 @@ static struct target_core_fabric_ops mlx4_fc_ops = {
 	.fabric_drop_nodeacl		= mlx4_fc_drop_nodeacl,
 };
 
-static int mlx4_fc_register_configfs(void)
+int mlx4_fc_register_configfs(void)
 {
 	struct target_fabric_configfs *fabric;
 	int ret;
@@ -213,7 +225,7 @@ static int mlx4_fc_register_configfs(void)
 	/*
 	 * Register the top level struct config_item_type with TCM core
 	 */
-	fabric = target_fabric_configfs_init(THIS_MODULE, "_fc");
+	fabric = target_fabric_configfs_init(THIS_MODULE, "mlx4_fc");
 	if (IS_ERR(fabric)) {
 		printk(KERN_ERR "target_fabric_configfs_init() failed\n");
 		return PTR_ERR(fabric);
@@ -251,7 +263,7 @@ static int mlx4_fc_register_configfs(void)
 	return 0;
 };
 
-static void __exit mlx4_fc_deregister_configfs(void)
+void __exit mlx4_fc_deregister_configfs(void)
 {
 	if (!mlx4_fc_fabric_configfs)
 		return;
@@ -260,26 +272,3 @@ static void __exit mlx4_fc_deregister_configfs(void)
 	mlx4_fc_fabric_configfs = NULL;
 	printk(KERN_INFO "MLX4_FC[0] - Cleared mlx4_fc_fabric_configfs\n");
 };
-
-static int __init mlx4_fc_init(void)
-{
-	int ret;
-
-	ret = mlx4_fc_register_configfs();
-	if (ret < 0)
-		return ret;
-
-	return 0;
-};
-
-static void __exit mlx4_fc_exit(void)
-{
-	mlx4_fc_deregister_configfs();
-};
-
-MODULE_DESCRIPTION("MLX4_FC series fabric driver");
-MODULE_LICENSE("GPL");
-#if 0
-module_init(mlx4_fc_init);
-module_exit(mlx4_fc_exit);
-#endif

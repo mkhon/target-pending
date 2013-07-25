@@ -459,7 +459,7 @@ struct mfc_port {
 	void *mfc_fip_ctlr;
 	void *underdev;
 	u8 def_mac[ETH_ALEN];
-	u8 def_wwpn[ETH_ALEN + 2];
+	u8 wwpn[32];
 	struct mfc_fip fip_qp;
 	int link_up;
 	struct delayed_work link_work;
@@ -788,6 +788,9 @@ int mfc_port_register_sysfs(struct mfc_port *mfc_port);
 void mfc_port_deregister_sysfs(struct mfc_port *mfc_port);
 int mfc_vhba_register_sysfs(struct mfc_vhba *mfc_vhba);
 void mfc_vhba_deregister_sysfs(struct mfc_vhba *mfc_vhba);
+
+int mlx4_fc_register_configfs(void);
+void mlx4_fc_deregister_configfs(void);
 
 struct ib_umem;
 
