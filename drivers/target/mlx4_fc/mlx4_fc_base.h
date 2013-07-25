@@ -15,6 +15,8 @@ struct mlx4_fc_tpg {
 	u16 port_tpgt;
 	/* Pointer back to mlx4_fc_port */
 	struct mlx4_fc_port *port;
+	/* Pointer to mfc_port */
+	struct mfc_port *mfc_port;
 	/* Returned by mlx4_fc_make_tpg() */
 	struct se_portal_group se_tpg;
 };

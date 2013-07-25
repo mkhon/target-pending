@@ -72,14 +72,151 @@ static void mlx4_fc_drop_nodeacl(struct se_node_acl *se_acl)
 	kfree(nacl);
 }
 
+#define TPG_ATTR_RO(_name) TF_TPG_ATTRIB_ATTR_RO(mlx4_fc, _name);
+
+static ssize_t mlx4_fc_tpg_attrib_show_port(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "%d\n", mfc_port->port);
+}
+TPG_ATTR_RO(port);
+
+static ssize_t mlx4_fc_tpg_attrib_show_net_type(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "%s\n", (mfc_port->net_type == NET_ETH) ?
+			"NET_ETH" : "NET_IB");
+}
+TPG_ATTR_RO(net_type);
+
+static ssize_t mlx4_fc_tpg_attrib_show_base_rfci_qpn(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "0x%x\n", mfc_port->base_rfci_qpn);
+}
+TPG_ATTR_RO(base_rfci_qpn);
+
+static ssize_t mlx4_fc_tpg_attrib_show_num_rfci_qps(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "0x%x\n", mfc_port->num_rfci_qps);
+}
+TPG_ATTR_RO(num_rfci_qps);
+
+static ssize_t mlx4_fc_tpg_attrib_show_base_fexch_qpn(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "0x%x\n", mfc_port->base_fexch_qpn);
+}
+TPG_ATTR_RO(base_fexch_qpn);
+
+static ssize_t mlx4_fc_tpg_attrib_show_base_fexch_mpt(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "0x%x\n", mfc_port->base_fexch_mpt);
+}
+TPG_ATTR_RO(base_fexch_mpt);
+
+static ssize_t mlx4_fc_tpg_attrib_show_num_fexch_qps(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "0x%x\n", mfc_port->num_fexch_qps);
+}
+TPG_ATTR_RO(num_fexch_qps);
+
+static ssize_t mlx4_fc_tpg_attrib_show_log_num_fexch_per_vhba(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "0x%x\n", mfc_port->log_num_fexch_per_vhba);
+}
+TPG_ATTR_RO(log_num_fexch_per_vhba);
+
+static ssize_t mlx4_fc_tpg_attrib_show_initialized(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "%d\n", mfc_port->initialized);
+}
+TPG_ATTR_RO(initialized);
+
+static ssize_t mlx4_fc_tpg_attrib_show_link_up(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "%d\n", mfc_port->link_up);
+}
+TPG_ATTR_RO(link_up);
+
+static struct configfs_attribute *mlx4_fc_tpg_attrib_attrs[] = {
+	&mlx4_fc_tpg_attrib_port.attr,
+	&mlx4_fc_tpg_attrib_net_type.attr,
+	&mlx4_fc_tpg_attrib_base_rfci_qpn.attr,
+	&mlx4_fc_tpg_attrib_num_rfci_qps.attr,
+	&mlx4_fc_tpg_attrib_base_fexch_qpn.attr,
+	&mlx4_fc_tpg_attrib_base_fexch_mpt.attr,
+	&mlx4_fc_tpg_attrib_num_fexch_qps.attr,
+	&mlx4_fc_tpg_attrib_log_num_fexch_per_vhba.attr,
+	&mlx4_fc_tpg_attrib_initialized.attr,
+	&mlx4_fc_tpg_attrib_link_up.attr,
+	NULL,
+};
+
 static struct se_portal_group *mlx4_fc_make_tpg(
 	struct se_wwn *wwn,
 	struct config_group *group,
 	const char *name)
 {
-	struct mlx4_fc_port*port = container_of(wwn,
+	struct mlx4_fc_port *port = container_of(wwn,
 			struct mlx4_fc_port, port_wwn);
-
+	struct mfc_port *mfc_port = port->mfc_port;
 	struct mlx4_fc_tpg *tpg;
 	unsigned long tpgt;
 	int ret;
@@ -96,6 +233,7 @@ static struct se_portal_group *mlx4_fc_make_tpg(
 	}
 	tpg->port = port;
 	tpg->port_tpgt = tpgt;
+	tpg->mfc_port = mfc_port;
 
 	ret = core_tpg_register(&mlx4_fc_fabric_configfs->tf_ops, wwn,
 				&tpg->se_tpg, (void *)tpg,
@@ -239,7 +377,7 @@ int mlx4_fc_register_configfs(void)
 	 */
 	TF_CIT_TMPL(fabric)->tfc_wwn_cit.ct_attrs = mlx4_fc_wwn_attrs;
 	TF_CIT_TMPL(fabric)->tfc_tpg_base_cit.ct_attrs = NULL;
-	TF_CIT_TMPL(fabric)->tfc_tpg_attrib_cit.ct_attrs = NULL;
+	TF_CIT_TMPL(fabric)->tfc_tpg_attrib_cit.ct_attrs = mlx4_fc_tpg_attrib_attrs;
 	TF_CIT_TMPL(fabric)->tfc_tpg_param_cit.ct_attrs = NULL;
 	TF_CIT_TMPL(fabric)->tfc_tpg_np_base_cit.ct_attrs = NULL;
 	TF_CIT_TMPL(fabric)->tfc_tpg_nacl_base_cit.ct_attrs = NULL;
