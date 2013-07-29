@@ -297,8 +297,12 @@ static void create_vhba(struct work_struct *work)
 	fcf->vhba = vhba;
 	fcf->fcoe_fip = fip;
 	fip->selected_fcf.fcf = fcf;
-
+#if 0
 	fcoe_ctlr_init(&fcf->ofc_ctlr, FIP_MODE_AUTO);
+#else
+	printk("create_vhba for mlx4_fcoe: calling fcoe_ctlr_init for FIP_MODE_VN2VN\n");
+	fcoe_ctlr_init(&fcf->ofc_ctlr, FIP_MODE_VN2VN);
+#endif
 	fcf->ofc_ctlr.send = fip_send;
 	fcf->ofc_ctlr.update_mac = ofc_update_src_mac;
 	fcf->ofc_ctlr.get_src_addr = mfc_get_src_addr;
