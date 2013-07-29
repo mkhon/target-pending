@@ -35,3 +35,4 @@ source "drivers/target/iscsi/Kconfig"
 source "drivers/target/sbp/Kconfig"
 
 endif
+source "drivers/target/mlx4_fc/Kconfig"

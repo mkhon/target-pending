@@ -1,0 +1,20 @@
+config MLX4_FC
+	tristate "MLX4_FC fabric module"
+	depends on TARGET_CORE && CONFIGFS_FS
+	default n
+	---help---
+	Say Y here to enable the MLX4_FC fabric module
+
+config MLX4_FCOIB
+	tristate "MLX4_FCOIB module"
+	depends on MLX4_FC
+	default n
+	---help---
+	Say Y here to enable the MLX_FCOIB module
+
+config MLX4_FCOE
+        tristate "MLX4_FCOE module"
+        depends on MLX4_FC
+        default n
+        ---help---
+        Say Y here to enable the MLX_FCOIB module
