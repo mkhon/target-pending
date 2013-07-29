@@ -159,19 +159,37 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 		goto out_free_skb;
 	}
 
+	printk("msg->fh.fip_op: 0x%04x msg->fh.fip_subcode: 0x%04x\n",
+		msg->fh.fip_op, msg->fh.fip_subcode);
+
 	if ((msg->fh.fip_op == htons(FIP_OP_VLAN)) &&
 			(msg->fh.fip_subcode == FIP_SC_VL_REP)) {
 		fip_rx_vlan_resp(mfc_port, skb);
 		return;
 	}
+#if 0
+	if ((msg->fh.fip_op == htons(FIP_OP_VN2VN)) &&
+			(msg->fh.fip_subcode == FIP_SC_VN_CLAIM_REQ)) {
+		printk("fip_op == FIP_OP_VN2VN && fip_subcode == FIP_SC_VN_CLAIM_REQ\n");
+		fip_rx_vn2vn_req(mfc_port, skb);
+		return;
+	}
+#endif
+	printk("fip_rx: fip->selected_fcf.fcf: %p fip->selected_fcf.vlan_id: %u\n",
+			fip->selected_fcf.fcf, fip->selected_fcf.vlan_id);
 
 	/* other FIP messages forwarded to internal OFC FIP controller */
+#if 0
 	if (fip->selected_fcf.fcf &&
 		(fip->selected_fcf.vlan_id == vlan_id)) {
 		skb_reset_mac_header(skb);
 		skb->data = skb_pull(skb, sizeof(struct ethhdr));
 		fcoe_ctlr_recv(&fip->selected_fcf.fcf->ofc_ctlr, skb);
 	}
+#else
+	skb->data = skb_pull(skb, sizeof(struct ethhdr));
+	fcoe_ctlr_recv(&fip->selected_fcf.fcf->ofc_ctlr, skb);
+#endif
 
 	return;
 
