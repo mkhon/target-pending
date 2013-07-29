@@ -463,8 +463,11 @@ static struct mfc_fip_ctlr mlx4_fcoe_fip = {
 static int __init fip_init_module(void)
 {
 	int rc = 0;
+	printk("Entering fip_init_module >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
 #if 0
 	rc = fctgt_dev_register(&mlx4_fcoe_fip);
+#else
+	mlx4_fc_register_fip_ctlr(&mlx4_fcoe_fip, NET_ETH);
 #endif
 	return rc;
 }
@@ -473,6 +476,8 @@ static void __exit fip_cleanup_module(void)
 {
 #if 0
 	fctgt_dev_deregister();
+#else
+	mlx4_fc_deregister_fip_ctlr(NET_ETH);
 #endif
 }
 
