@@ -208,8 +208,13 @@ static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 	mfc_update_src_mac(vhba, mac);
 	mfc_flogi_finished(vhba, fc_frame_header_get(fp)->fh_d_id);
 done:
+	printk("flogi_resp for mlx4_fcoe(): Before fc_lport_flogi_resp\n");
 	fc_lport_flogi_resp(seq, fp, vhba->lp);
+#if 0
 	fctgt_notify_flogi_acc(vhba, seq, fp);
+#else
+	dump_stack();
+#endif
 
 }
 
