@@ -299,6 +299,28 @@ static int mlx4_HW2SW_MPT(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox
 			    MLX4_CMD_TIME_CLASS_B, MLX4_CMD_WRAPPED);
 }
 
+int mlx4_mr_reserve_range(struct mlx4_dev *dev, int cnt, int align,
+			  u32 *base_mridx)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	u32 mridx;
+
+	mridx = mlx4_bitmap_alloc_range(&priv->mr_table.mpt_bitmap, cnt, align);
+	if (mridx == -1)
+		return -ENOMEM;
+
+	*base_mridx = mridx;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mlx4_mr_reserve_range);
+
+void mlx4_mr_release_range(struct mlx4_dev *dev, u32 base_mridx, int cnt)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	mlx4_bitmap_free_range(&priv->mr_table.mpt_bitmap, base_mridx, cnt);
+}
+EXPORT_SYMBOL_GPL(mlx4_mr_release_range);
+
 static int mlx4_mr_alloc_reserved(struct mlx4_dev *dev, u32 mridx, u32 pd,
 			   u64 iova, u64 size, u32 access, int npages,
 			   int page_shift, struct mlx4_mr *mr)

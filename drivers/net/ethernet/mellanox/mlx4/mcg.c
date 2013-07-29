@@ -1005,6 +1005,7 @@ out:
 	mlx4_free_cmd_mailbox(dev, mailbox);
 	return err;
 }
+EXPORT_SYMBOL_GPL(mlx4_qp_attach_common);
 
 int mlx4_qp_detach_common(struct mlx4_dev *dev, struct mlx4_qp *qp, u8 gid[16],
 			  enum mlx4_protocol prot, enum mlx4_steer_type steer)
@@ -1118,6 +1119,7 @@ out:
 	mlx4_free_cmd_mailbox(dev, mailbox);
 	return err;
 }
+EXPORT_SYMBOL_GPL(mlx4_qp_detach_common);
 
 static int mlx4_QP_ATTACH(struct mlx4_dev *dev, struct mlx4_qp *qp,
 			  u8 gid[16], u8 attach, u8 block_loopback,
