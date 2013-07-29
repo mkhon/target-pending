@@ -455,11 +455,9 @@ static void mfc_fip_rx_comp(void *arg, struct mlx4_cqe *cqe)
 	if (be32_to_cpu(cqe->vlan_my_qpn) & 0x60000000)
 		vlan_id = be16_to_cpu(cqe->sl_vid) & 0x0fff;
 
-	/*
 	printk("%s:%d: Port %d, vlan %d, got FIP message, size %d\n", __FUNCTION__, __LINE__,
 		mfc_port->port, vlan_id, skb->len);
-	HEXDUMP(skb->data, skb->len);
-	*/
+//	HEXDUMP(skb->data, skb->len);
 
 	err = mfc_prepare_fip_rx_buf(mfc_port);
 	if (err)
