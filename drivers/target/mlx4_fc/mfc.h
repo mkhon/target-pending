@@ -175,7 +175,7 @@ do {								\
 
 #define fctgt_err(fmt, arg...) printk(KERN_DEBUG "### Error %s:%d - " fmt, __func__, __LINE__, ## arg)
 
-#if 1
+#if 0
 extern int fctgt_dbg_lvl;
 
 #define fctgt_info(fmt, arg...) do { \
@@ -367,6 +367,8 @@ struct mfc_fip {
 	struct mfc_cq fc_cq;
 	u8 steer_all_enodes_gid[16];
 	u8 steer_ethertype_gid[16];
+	u8 steer_all_vn2vn_gid[16];
+	u8 steer_all_p2p_gid[16];
 };
 
 struct mfc_sysfs_attr {

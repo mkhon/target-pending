@@ -788,6 +788,7 @@ int mfc_init_fip(struct mfc_port *fc_port)
 	}
 
 	if (fc_port->net_type == NET_ETH) {
+#if 0
 		memcpy(&fc_port->fip_qp.steer_all_enodes_gid[10], FIP_ALL_ENODE_MACS, ETH_ALEN);
 		fc_port->fip_qp.steer_all_enodes_gid[4] = 0; // vep_num
 		fc_port->fip_qp.steer_all_enodes_gid[5] = fc_port->port;
@@ -801,6 +802,37 @@ int mfc_init_fip(struct mfc_port *fc_port)
 					fc_port->port);
 			return err;
 		}
+#else
+		memcpy(&fc_port->fip_qp.steer_all_vn2vn_gid[10], FIP_ALL_VN2VN_MACS, ETH_ALEN);
+		fc_port->fip_qp.steer_all_vn2vn_gid[4] = 0; // vep_num
+		fc_port->fip_qp.steer_all_vn2vn_gid[5] = fc_port->port;
+		fc_port->fip_qp.steer_all_vn2vn_gid[7] = MLX4_MC_STEER << 1;
+		err = mlx4_qp_attach_common(mfc_dev->dev, &qp->mqp,
+				fc_port->fip_qp.steer_all_vn2vn_gid, 0,
+				MLX4_PROT_ETH, MLX4_MC_STEER);
+		if (err) {
+			dev_err(mfc_dev->dma_dev,
+					"Couldn't register fip steering rule for port=%d\n",
+					fc_port->port);
+			return err;
+		}
+		printk("After mlx4_qp_attach_common for FIP_ALL_VN2VN_MACS\n");
+
+		memcpy(&fc_port->fip_qp.steer_all_p2p_gid[10], FIP_ALL_P2P_MACS, ETH_ALEN);
+		fc_port->fip_qp.steer_all_p2p_gid[4] = 0; // vep_num
+		fc_port->fip_qp.steer_all_p2p_gid[5] = fc_port->port;
+		fc_port->fip_qp.steer_all_p2p_gid[7] = MLX4_MC_STEER << 1;
+		err = mlx4_qp_attach_common(mfc_dev->dev, &qp->mqp,
+				fc_port->fip_qp.steer_all_p2p_gid, 0,
+				MLX4_PROT_ETH, MLX4_MC_STEER);
+		if (err) {
+			dev_err(mfc_dev->dma_dev,
+					"Couldn't register fip steering rule for port=%d\n",
+					fc_port->port);
+			goto err_detach_all_vn2vn;
+		}
+		printk("After mlx4_qp_attach_common for FIP_ALL_P2P_MACS\n");
+#endif
 		memcpy(&fc_port->fip_qp.steer_ethertype_gid[10],
 				fc_port->def_mac, ETH_ALEN);
 		fc_port->fip_qp.steer_ethertype_gid[4] = 0; // vep_num
@@ -817,17 +849,33 @@ int mfc_init_fip(struct mfc_port *fc_port)
 			dev_err(mfc_dev->dma_dev,
 					"Couldn't register fip steering rule for port=%d\n",
 					fc_port->port);
+#if 0
 			goto err_detach_all_enodes;
+#else
+			goto err_detach_all_p2p;
+#endif
 		}
 	}
 	fc_port->fip_qp.fc_qp.is_flushing = 0;
 
 	return 0;
 
+#if 1
+err_detach_all_p2p:
+	mlx4_qp_detach_common(mfc_dev->dev, &qp->mqp,
+		fc_port->fip_qp.steer_all_p2p_gid,
+		MLX4_PROT_ETH, MLX4_UC_STEER);
+
+err_detach_all_vn2vn:
+	mlx4_qp_detach_common(mfc_dev->dev, &qp->mqp,
+		fc_port->fip_qp.steer_all_vn2vn_gid,
+		MLX4_PROT_ETH, MLX4_UC_STEER);
+#else
 err_detach_all_enodes:
 	mlx4_qp_detach_common(mfc_dev->dev, &fc_port->fip_qp.fc_qp.mqp,
 			fc_port->fip_qp.steer_all_enodes_gid,
 			MLX4_PROT_ETH, MLX4_MC_STEER);
+#endif
 	return err;
 }
 
@@ -840,9 +888,18 @@ int mfc_deinit_fip(struct mfc_port *fc_port)
 		mlx4_qp_detach_common(mfc_dev->dev, &qp->mqp,
 				fc_port->fip_qp.steer_ethertype_gid,
 				MLX4_PROT_ETH , MLX4_UC_STEER);
+#if 0
 		mlx4_qp_detach_common(mfc_dev->dev, &qp->mqp,
 				fc_port->fip_qp.steer_all_enodes_gid,
 				MLX4_PROT_ETH, MLX4_MC_STEER);
+#else
+		mlx4_qp_detach_common(mfc_dev->dev, &qp->mqp,
+				fc_port->fip_qp.steer_all_p2p_gid,
+				MLX4_PROT_ETH, MLX4_UC_STEER);
+		mlx4_qp_detach_common(mfc_dev->dev, &qp->mqp,
+				fc_port->fip_qp.steer_all_vn2vn_gid,
+				MLX4_PROT_ETH, MLX4_UC_STEER);
+#endif
 	}
 	return 0;
 }
