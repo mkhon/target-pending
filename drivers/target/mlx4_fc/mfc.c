@@ -533,6 +533,8 @@ int mfc_fip_tx(struct mfc_port *mfc_port, struct sk_buff *skb, int vlan_id, int 
 	__be32 op_own;
 	unsigned long flags;
 
+	printk("Entering mfc_fip_tx >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+
 	spin_lock_irqsave(&sq->lock, flags);
 	if (unlikely((u32) (sq->prod - sq->cons - 1) > sq->size - 2)) {
 		dev_err(mfc_dev->dma_dev,
@@ -1158,36 +1160,41 @@ static void mfc_lport_abort_io(struct fc_lport *lp)
 		     vhba->idx, vhba->mfc_port->port);
 }
 
-static int mfc_libfc_init(struct fc_lport *lp, int min_xid, int max_xid,
-			  u64 wwpn, u64 wwnn)
+static struct fc_exch_mgr *mfc_libfc_init(struct mfc_port *mfc_port,
+			struct fc_lport *lp, struct fcoe_ctlr *ctlr,
+			int min_xid, int max_xid, u64 wwpn, u64 wwnn,
+			u32 fc_payload_size)
 {
-	struct mfc_vhba *vhba = lport_priv(lp);
-//	int err;
+	struct fc_exch_mgr *emp;
+//	struct mfc_vhba *vhba = lport_priv(lp);
+	int err;
 
 	fc_set_wwnn(lp, wwnn);
 	fc_set_wwpn(lp, wwpn);
 
 	/* libfc expects max FC frame size, including native FC header */
-	fc_set_mfs(lp, vhba->fc_payload_size + sizeof(struct fc_frame_header));
+	fc_set_mfs(lp, fc_payload_size + sizeof(struct fc_frame_header));
 
 	lp->host->max_lun = MFC_MAX_LUN;
 	lp->host->max_id = MFC_MAX_FCP_TARGET;
 	lp->host->max_channel = 0;
 	lp->host->transportt = mfc_transport_template;
 
-//	err = scsi_add_host(lp->host, NULL);
-//	if (err) {
-//		shost_printk(KERN_ERR, lp->host,
-//			     "Fail scsi_add_host vhba=%d port=%d err=%d\n",
-//			     vhba->idx, vhba->mfc_port->port, err);
-//		return err;
-//	}
+	err = scsi_add_host(lp->host, NULL);
+	if (err) {
+		shost_printk(KERN_ERR, lp->host,
+			"Fail scsi_add_host vhba=%d port=%d err=%d\n",
+				0, mfc_port->port, err);
+		return ERR_PTR(err);
+	}
 
-//	snprintf(fc_host_symbolic_name(lp->host), FC_SYMBOLIC_NAME_SIZE,
-//		 "hca%d_p%d_vhba%d", vhba->mfc_port->mfc_dev->idx,
-//		 vhba->mfc_port->port, vhba->idx);
-
+	snprintf(fc_host_symbolic_name(lp->host), FC_SYMBOLIC_NAME_SIZE,
+		 "hca%d_p%d_vhba%d", mfc_port->mfc_dev->idx,
+		 mfc_port->port, 0);
+#if 0
 	lp->tt = mlx4_libfc_fcn_templ;
+	printk("mfc_libfc_init: Setting lp->tt: %p\n", &lp->tt);
+	printk("mfc_libfc_init: lp: %p lp->host: %p\n", lp, lp->host);
 
 	fc_exch_init(lp);
 	fc_elsct_init(lp);
@@ -1195,14 +1202,131 @@ static int mfc_libfc_init(struct fc_lport *lp, int min_xid, int max_xid,
 	fc_rport_init(lp);
 	fc_disc_init(lp);
 
-	vhba->emp = fc_exch_mgr_alloc(lp, FC_CLASS_3, min_xid, max_xid, NULL);
-	if (!vhba->emp) {
+	printk("mfc_libfc_init: Done with exch, elsct, lport, rport and disc init\n");
+#else
+	err = fcoe_libfc_config(lp, ctlr, &mlx4_libfc_fcn_templ, 1);
+	if (err) {
+		pr_err("fcoe_libfc_config failed: %d\n", err);
+		return ERR_PTR(err);
+	}
+	printk("mfc_libfc_init: Done with fcoe_libfc_config >>>>>>>>>>>\n");
+#endif
+	emp = fc_exch_mgr_alloc(lp, FC_CLASS_3, min_xid, max_xid, NULL);
+	if (!emp) {
 		shost_printk(KERN_ERR, lp->host,
 			     "Fail alloc libfc exch manager vhba=%d port=%d\n",
-			     vhba->idx, vhba->mfc_port->port);
-		return -ENOMEM;
+			     0, 0);
+		return ERR_PTR(-ENOMEM);
 	}
-	return 0;
+	printk("mfc_libfc_init: Allocated emp: %p from fc_exch_mgr_alloc\n", emp);
+	return emp;
+}
+
+struct fc_lport *mfc_create_lport(struct mfc_port *fc_port, u64 wwpn, u64 wwnn,
+				  struct module *owner)
+{
+	struct mfc_dev *mfc_dev = fc_port->mfc_dev;
+	struct fc_lport *lp;
+	struct fc_exch_mgr *emp;
+	struct fcoe_ctlr *ofc_ctlr = NULL;
+	struct mfc_fip_ctlr *fip_ctlr = &fip_ctlrs[fc_port->net_type - 1];
+	struct mfc_vhba *vhba;
+	struct Scsi_Host *shost;
+	struct scsi_host_template tmp_sht;
+#warning FIXME: Hardcoded mtu=2220
+	u32 mtu = 2200;
+	int err;
+
+	if (fip_ctlr->create_fcoe_ctlr) {
+		printk("Calling fip_ctlr->create_fcoe_ctlr >>>>>>>>>>>>>>>>\n");
+		ofc_ctlr = fip_ctlr->create_fcoe_ctlr(fc_port);
+		if (!ofc_ctlr)
+			return ERR_PTR(-ENOMEM);
+		printk("mfc_create_lport got fcoe_ctlr: %p\n", ofc_ctlr);
+	}
+
+	tmp_sht = mfc_driver_template;
+	tmp_sht.can_queue = (1 << mfc_log_exch_per_vhba) - mfc_num_reserved_xids;
+	tmp_sht.module = owner;
+
+	lp = libfc_host_alloc(&tmp_sht, sizeof(struct mfc_vhba));
+	if (!lp) {
+		dev_err(mfc_dev->dma_dev,
+			"Could not allocate lport on port %d\n", 0);
+		return ERR_PTR(-ENOMEM);
+	}
+	fc_port->lport = lp;
+
+	printk("libfc_host_alloc allocated lp: %p lp->host: %p >>>>>>>>>>>>>>>>>>>>>>>>>>\n", lp, lp->host);
+	if (ofc_ctlr) {
+		ofc_ctlr->lp = lp;
+		lp->tt.elsct_send = fip_ctlr->elsct_send;
+		printk("Setup ofc_ctlr->lp: %p and lp->tt.elsct_send from fip_ctlr->elsct_send\n",
+			ofc_ctlr->lp);
+	}
+
+	shost = lp->host;
+	shost->max_cmd_len = 16;
+//	shost->hostt = tmp_sht;
+
+	err = mfc_lport_config(lp);
+	if (err) {
+		dev_err(mfc_dev->dma_dev,
+			"Error configuring lport on port %d\n", 0);
+		return ERR_PTR(err);
+        }
+#if 1
+        vhba = mfc_create_vhba_fcoe(fc_port, -1,
+                        2200, 4096, THIS_MODULE);
+        if (IS_ERR(vhba)) {
+                printk("ERROR: could not create vhba, err=%ld\n", PTR_ERR(vhba));
+                return ERR_PTR(-ENOMEM);
+	}
+	printk("mfc_create_lport() Got vhba: %p >>>>>>>>>>>>>>>>>>>>>>>>>>>\n", vhba);
+#endif
+	if (!mfc_t11_mode) {
+		fc_port->fcoe_hlen = sizeof(struct fcoe_hdr_old);
+		fc_port->fc_payload_size = mtu -
+			sizeof(struct fcoe_hdr_old) -
+			sizeof(struct fc_frame_header) -
+			sizeof(struct fcoe_crc_eof_old);
+	} else {
+		fc_port->fcoe_hlen = sizeof(struct fcoe_hdr);
+		fc_port->fc_payload_size = mtu -
+			sizeof(struct fcoe_hdr) -
+			sizeof(struct fc_frame_header) -
+			sizeof(struct fcoe_crc_eof);
+	}
+
+	if (fc_port->net_type == NET_IB) {
+		fc_port->fc_payload_size -= 2;
+		if (!mfc_t11_mode)
+			/* in IB pre-T11 we have 3 padding in EOF */
+			fc_port->fc_payload_size -= 3;
+	}
+        /*
+	 * Enforcing the fc_payload_size to 8B multiple to work-around
+	 * Tachyon/Tachlite DIF insertion/marshalling on 8B alignment.
+	 */
+	fc_port->fc_payload_size = min(mfc_payload_size,
+				fc_port->fc_payload_size) & 0xFFFFFFFFFFFFFFF0;
+	printk("Using fc_port->fc_payload_size: %u for mfc_libfc_init\n", fc_port->fc_payload_size);
+
+	emp = mfc_libfc_init(fc_port, lp, ofc_ctlr, 0, //vhba->base_reserved_xid,
+			100, //FC_XID_MAX, //vhba->base_reserved_xid + vhba->num_reserved_xid - 1,
+			wwpn, wwnn, fc_port->fc_payload_size);
+        if (IS_ERR(emp)) {
+                shost_printk(KERN_ERR, lp->host,
+                             "Fail to init mfc_libfc_init\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	if (fip_ctlr->start_fcoe_ctlr) {
+		fip_ctlr->start_fcoe_ctlr(fc_port, ofc_ctlr);
+	}
+
+	printk("Returning lp: %p for mfc_create_lport >>>>>>>>>>>>>>>> !!!\n", lp);
+	return lp;
 }
 
 static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int mtu,
@@ -1211,7 +1335,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 		struct module *owner)
 {
 	struct mfc_dev *mfc_dev = fc_port->mfc_dev;
-	struct fc_lport *lp;
+	struct fc_lport *lp = fc_port->lport;
 	struct mfc_vhba *vhba;
 	int idx, port = fc_port->port;
 	int err = 0;
@@ -1219,6 +1343,8 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 	struct Scsi_Host *shost;
 	struct scsi_host_template tmp_sht;
 
+	printk("Entering mfc_create_vhba >>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+#if 0
 	tmp_sht = mfc_driver_template;
 	tmp_sht.can_queue = (1 << mfc_log_exch_per_vhba) -
 	    mfc_num_reserved_xids;
@@ -1234,6 +1360,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 
 	shost = lp->host;
 	shost->max_cmd_len = 16;
+
 	vhba = lport_priv(lp);
 	vhba->sht = tmp_sht;
 	shost->hostt = &vhba->sht;
@@ -1245,7 +1372,11 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 			"Error configuring lport on port %d\n", port);
 		goto err_host_put;
 	}
-
+#else
+	vhba = lport_priv(lp);
+	vhba->sht = mfc_driver_template;
+	vhba->lp = lp;
+#endif
 	idx = mfc_bitmap_slot_alloc(&fc_port->fexch_bulk_bm, 1);
 	if (idx == -1) {
 		dev_err(mfc_dev->dma_dev,
@@ -1258,7 +1389,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 	vhba->fc_mac_idx = -1;
 	/* TODO: needed? */
 	vhba->rfci_rx_enabled = 0;
-
+#if 0
 	if (!mfc_t11_mode) {
 		vhba->fcoe_hlen = sizeof(struct fcoe_hdr_old);
 		vhba->fc_payload_size = mtu -
@@ -1279,13 +1410,15 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 			/* in IB pre-T11 we have 3 padding in EOF */
 			vhba->fc_payload_size -= 3;
 	}
-
+#endif
+#if 0
 	/*
 	 * Enforcing the fc_payload_size to 8B multiple to work-around
 	 * Tachyon/Tachlite DIF insertion/marshalling on 8B alignment.
 	 */
 	vhba->fc_payload_size = min(mfc_payload_size,
 				    vhba->fc_payload_size) & 0xFFFFFFFFFFFFFFF0;
+#endif
 	vhba->num_fexch = 1 << fc_port->log_num_fexch_per_vhba;
 	vhba->base_fexch_qpn = fc_port->base_fexch_qpn + idx * vhba->num_fexch;
 	vhba->base_fexch_mpt = fc_port->base_fexch_mpt + idx * vhba->num_fexch;
@@ -1322,7 +1455,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 			     idx, port, err);
 		goto err_destroy_rfci;
 	}
-
+#if 0
 	err = mfc_libfc_init(lp, vhba->base_reserved_xid,
 			100, //FC_XID_MAX, //vhba->base_reserved_xid + vhba->num_reserved_xid - 1,
 			     wwpn, wwnn);
@@ -1332,7 +1465,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 			     idx, port, err);
 		goto err_destroy_fcmd;
 	}
-
+#endif
 	spin_lock_irqsave(&fc_port->lock, flags);
 	list_add(&vhba->list, &fc_port->vhba_list);
 	spin_unlock_irqrestore(&fc_port->lock, flags);
@@ -1348,9 +1481,11 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 	return vhba;
 
 err_destroy_libfc:
+#if 0
 	fc_remove_host(lp->host);
 //	scsi_remove_host(lp->host);
 	fc_lport_destroy(lp);
+#endif
 err_destroy_fcmd:
 	mfc_destroy_fexchs(vhba);
 err_destroy_rfci:
@@ -1358,13 +1493,17 @@ err_destroy_rfci:
 err_free_fexch_bulk:
 	mfc_bitmap_slot_free(&fc_port->fexch_bulk_bm, idx);
 err_lport_destroy:
+#if 0
 	fc_lport_free_stats(lp);
 	if (vhba->emp) {
 		fc_exch_mgr_free(lp);
 		vhba->emp = NULL;
 	}
+#endif
 err_host_put:
+#if 0
 	scsi_host_put(lp->host);
+#endif
 err_out:
 	return ERR_PTR(err);
 }
@@ -1445,10 +1584,15 @@ void mfc_destroy_vhba(struct mfc_vhba *vhba)
 
 //	fc_remove_host(lp->host);
 //	scsi_remove_host(lp->host);
+#warning FIXME: Release of fc_exch_mgr_free for mfc_destroy_vhba()
+#if 0
 	if (vhba->emp) {
 		fc_exch_mgr_free(lp);
 		vhba->emp = NULL;
 	}
+#else
+	dump_stack();
+#endif
 	fc_lport_free_stats(lp);
 	mfc_vhba_deregister_sysfs(vhba);
 }

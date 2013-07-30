@@ -26,6 +26,8 @@ struct mlx4_fc_port {
 	u8 port_proto_id;
 	/* Binary World Wide unique Port Name for FC Target Lport */
 	u64 port_wwpn;
+	/* Binary World Wide unique Node Name for FC Target Lport */
+	u64 port_wwnn;
 	/* ASCII formatted WWPN for FC Target Lport */
 	char port_name[MLX4_FC_NAMELEN];
 	/* Pointer to mfc_port created by mlx4 interface ->add_dev */

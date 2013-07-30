@@ -72,6 +72,7 @@ static void mlx4_fc_drop_nodeacl(struct se_node_acl *se_acl)
 	kfree(nacl);
 }
 
+#define TPG_ATTR(_name, _mode) TF_TPG_ATTRIB_ATTR(mlx4_fc, _name, _mode);
 #define TPG_ATTR_RO(_name) TF_TPG_ATTRIB_ATTR_RO(mlx4_fc, _name);
 
 static ssize_t mlx4_fc_tpg_attrib_show_port(
@@ -195,6 +196,59 @@ static ssize_t mlx4_fc_tpg_attrib_show_link_up(
 }
 TPG_ATTR_RO(link_up);
 
+static ssize_t mlx4_fc_tpg_attrib_show_vn2vn(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mfc_port *mfc_port = tpg->mfc_port;
+
+	return snprintf(page, PAGE_SIZE, "%d\n",
+		       (mfc_port->fip_mode == FIP_MODE_VN2VN) ? 1 : 0);
+}
+
+static ssize_t mlx4_fc_tpg_attrib_store_vn2vn(
+	struct se_portal_group *se_tpg,
+	const char *page,
+	size_t count)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_port *port = tpg->port;
+	struct mfc_port *mfc_port = tpg->mfc_port;
+	struct fc_lport *lp;
+	u32 op;
+	int ret;
+
+	ret = kstrtou32(page, 0, &op);
+	if (ret)
+		return ret;
+	if ((op != 1) && (op != 0)) {
+		pr_err("Illegal value for vn2vn attribute: %u\n", op);
+		return -EINVAL;
+	}
+
+	if (op) {
+		if (mfc_port->fip_mode == FIP_MODE_VN2VN) {
+			pr_warn("mfc_port fip_mode already set to"
+				" FIP_MODE_VN2VN, ignoring\n");
+			return count;
+		}
+		lp = mfc_create_lport(mfc_port, port->port_wwpn, port->port_wwpn,
+				      THIS_MODULE);
+		if (IS_ERR(lp))
+			return PTR_ERR(lp);
+
+		printk("mlx4_fc_tpg_attrib_store_vn2vn: After mfc_create_lport: %p !\n", lp);
+	} else {
+
+
+	}
+	return count;
+}
+TPG_ATTR(vn2vn, S_IRUGO | S_IWUSR);
+
 static struct configfs_attribute *mlx4_fc_tpg_attrib_attrs[] = {
 	&mlx4_fc_tpg_attrib_port.attr,
 	&mlx4_fc_tpg_attrib_net_type.attr,
@@ -206,6 +260,7 @@ static struct configfs_attribute *mlx4_fc_tpg_attrib_attrs[] = {
 	&mlx4_fc_tpg_attrib_log_num_fexch_per_vhba.attr,
 	&mlx4_fc_tpg_attrib_initialized.attr,
 	&mlx4_fc_tpg_attrib_link_up.attr,
+	&mlx4_fc_tpg_attrib_vn2vn.attr,
 	NULL,
 };
 
@@ -261,7 +316,8 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 {
 	struct mlx4_fc_port *port;
 	struct mfc_port *mfc_port;
-	u64 wwpn = 0;
+	struct mfc_dev *mfc_dev;
+	u64 wwn;
 
 	/* if (mlx4_fc_parse_wwn(name, &wwpn, 1) < 0)
 		return ERR_PTR(-EINVAL); */
@@ -271,7 +327,6 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 		printk(KERN_ERR "Unable to allocate struct mlx4_fc_wwpn");
 		return ERR_PTR(-ENOMEM);
 	}
-	port->port_wwpn = wwpn;
 	/* mlx4_fc_format_wwn(&port->port_name[0], MLX4_FC_NAMELEN, wwpn); */
 
 	mfc_port = mlx4_fc_get_port_by_wwpn(name);
@@ -280,8 +335,13 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 		return ERR_PTR(-EINVAL);
 	}
 	port->mfc_port = mfc_port;
+	mfc_dev = mfc_port->mfc_dev;
+	wwn = mfc_dev->dev->caps.def_mac[mfc_port->port];
+	port->port_wwnn = wwn | ((u64) 0x10 << 56);
+	port->port_wwpn = wwn | ((u64) 0x20 << 56);
 
-	printk("Using mfc_port for configfs_wwpn %s\n", mfc_port->wwpn);
+	printk("Using mfc_port for configfs_wwpn wwpn: 0x%016lx wwnn: 0x%016lx\n",
+		port->port_wwpn, port->port_wwnn);
 
 	return &port->port_wwn;
 }

@@ -95,6 +95,8 @@ static void fip_send(struct fcoe_ctlr *ofc_ctlr, struct sk_buff *skb)
 	struct fcf *fcf = container_of(ofc_ctlr, struct fcf, ofc_ctlr);
 	struct mlx4_fcoe_fip *fip = fcf->fcoe_fip;
 
+	printk("fcoe_main: fip_send >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+
 	mfc_fip_tx(fip->mfc_port, skb, fip->selected_fcf.vlan_id, 3);
 }
 
@@ -204,6 +206,8 @@ static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 //	struct fc_lport *lport = vhba->lp;
 	u8 *mac;
 
+	printk("fcoe_main: flogi_resp >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+
 	fctgt_dbg("RX: FLOGI RES\n");
 //	printk("Got flogi response: err: %ld\n", IS_ERR(fp));
 	if (IS_ERR(fp))
@@ -243,6 +247,8 @@ static void logo_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 	struct fc_lport *lport = vhba->lp;
 	static u8 zero_mac[ETH_ALEN] = { 0 };
 
+	printk("fcoe_main: logo_resp >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+
 	if (!IS_ERR(fp))
 		mfc_update_src_mac(vhba, zero_mac);
 	fc_lport_logo_resp(seq, fp, lport);
@@ -258,6 +264,8 @@ static struct fc_seq *elsct_send(struct fc_lport *lport, u32 did,
 	struct mfc_vhba *vhba = lport_priv(lport);
 	struct fcf *fcf = vhba_priv(vhba);
 	struct fc_frame_header *fh = fc_frame_header_get(fp);
+
+	printk("fcoe_main: elsct_send fc_frame_payload_op(fp): 0x%04x >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n", fc_frame_payload_op(fp));
 
 	switch (op) {
 	case ELS_FLOGI:
@@ -276,13 +284,18 @@ static struct fc_seq *elsct_send(struct fc_lport *lport, u32 did,
 
 static void ofc_update_src_mac(struct fc_lport *lport, u8 *mac)
 {
+#if 0
 	shost_printk(KERN_INFO, lport->host, "ofc ctlr called update_mac(). Should not happen.\n");
+#else
+	printk("ofc_update_src_mac: 0x%02x %02x %02x %02x %02x %02x\n",
+		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+#endif
 }
 
 static void create_vhba(struct work_struct *work)
 {
-	struct mlx4_fcoe_fip *fip =
-		container_of(work, struct mlx4_fcoe_fip, create_vhba_work);
+	struct mlx4_fcoe_fip *fip = container_of(work,
+				struct mlx4_fcoe_fip, create_vhba_work);
 	struct fcf *fcf;
 	struct mfc_vhba *vhba;
 
@@ -292,9 +305,22 @@ static void create_vhba(struct work_struct *work)
 		printk("ERROR: could not create vhba, err=%ld\n", PTR_ERR(vhba));
 		return;
 	}
+}
 
+static struct fcoe_ctlr *create_fcoe_ctlr(struct mfc_port *mfc_port)
+{
+	struct mlx4_fcoe_fip *fip = (struct mlx4_fcoe_fip *)mfc_port->mfc_fip_ctlr;
+	struct fcf *fcf;
+#if 0
 	fcf = vhba_priv(vhba);
 	fcf->vhba = vhba;
+#else
+	fcf = kzalloc(sizeof(struct fcf), GFP_KERNEL);
+	if (!fcf) {
+		pr_err("Unable to allocate struct fcf *\n");
+		return ERR_PTR(-ENOMEM);
+	}
+#endif
 	fcf->fcoe_fip = fip;
 	fip->selected_fcf.fcf = fcf;
 #if 0
@@ -306,20 +332,36 @@ static void create_vhba(struct work_struct *work)
 	fcf->ofc_ctlr.send = fip_send;
 	fcf->ofc_ctlr.update_mac = ofc_update_src_mac;
 	fcf->ofc_ctlr.get_src_addr = mfc_get_src_addr;
+#warning FIXME: Setup lport bits >>>>>>>>>>>>>>>>>>>>
+#if 0
 	fcf->ofc_ctlr.lp = vhba->lp;
 	vhba->lp->tt.elsct_send = elsct_send;
-
+#endif
 	/* setup Source Mac Address */
-	if (!fcf->ofc_ctlr.spma)
+	if (!fcf->ofc_ctlr.spma) {
+		printk("Setting fcf->ofc_ctlr.ctl_src_addr from mfc_port->def_mac >>>>>>>>>>>>>>>>>\n");
 		memcpy(fcf->ofc_ctlr.ctl_src_addr, fip->mfc_port->def_mac,
 		       ETH_ALEN);
+	}
 
-	fcoe_ctlr_link_up(&fcf->ofc_ctlr);
+	return &fcf->ofc_ctlr;
+}
+
+static void start_fcoe_ctlr(struct mfc_port *mfc_port, struct fcoe_ctlr *ctlr)
+{
+	struct fc_lport *lport = mfc_port->lport;
+	printk("start_fcoe_ctlr() ctlr: %p\n", ctlr);
+
 #warning FIXME: fctgt_vhba_entail in create_hba
 #if 0
 	fctgt_vhba_entail(vhba);
-#endif
+#else
+	printk("start_fcoe_ctlr: Before fc_fabric_login >>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+	fc_fabric_login(lport);
 
+	printk("start_fcoe_ctlr: Before fcoe_ctlr_link_up >>>>>>>>>>>>>>>>\n");
+	fcoe_ctlr_link_up(ctlr);
+#endif
 }
 
 static int els_send(struct mfc_vhba *vhba, struct sk_buff *skb)
@@ -484,6 +526,9 @@ static struct mfc_fip_ctlr mlx4_fcoe_fip = {
 	.link_state_changed = link_state_changed,
 	.els_send = els_send,
 	.fip_rx = fip_rx,
+	.create_fcoe_ctlr = create_fcoe_ctlr,
+	.start_fcoe_ctlr = start_fcoe_ctlr,
+	.elsct_send = elsct_send,
 };
 
 #warning FIXME: fip_init_module fctgt_dev_register disabled

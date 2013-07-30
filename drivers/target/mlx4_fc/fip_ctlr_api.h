@@ -45,12 +45,19 @@ struct mfc_fip_ctlr {
 	void (*link_state_changed)(struct mfc_port *);
 	int (*els_send)(struct mfc_vhba *, struct sk_buff *skb);
 	void (*fip_rx)(struct mfc_port *, int vlan_id, struct sk_buff *);
+	struct fcoe_ctlr *(*create_fcoe_ctlr)(struct mfc_port *);
+	void (*start_fcoe_ctlr)(struct mfc_port *, struct fcoe_ctlr *);
+	struct fc_seq *(*elsct_send)(struct fc_lport *, u32, struct fc_frame *,
+				     unsigned int, void (*resp)(struct fc_seq *,
+				     struct fc_frame *, void *), void *, u32);
 };
 
 void mlx4_fc_register_fip_ctlr(struct mfc_fip_ctlr *mlx4_fip, enum mfc_net_type net_type);
 void mlx4_fc_deregister_fip_ctlr(enum mfc_net_type net_type);
 void mlx4_fc_rescan_ports(enum mfc_net_type net_type);
 struct mfc_port *mlx4_fc_get_port_by_wwpn(const char *wwpn);
+
+struct fc_lport *mfc_create_lport(struct mfc_port *, u64, u64, struct module *);
 
 struct mfc_vhba *mfc_create_vhba_fcoe(struct mfc_port *mfc_port, int vlan_id,
 		int mtu, int priv_size, struct module *owner);

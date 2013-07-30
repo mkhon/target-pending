@@ -431,8 +431,9 @@ struct mfc_vhba {
 
 	/* sysfs stuff */
 	struct kobject kobj;
-
+#if 0
 	struct fc_exch_mgr *emp;
+#endif
 	struct scsi_host_template sht;
 
 	int (*fcp_req_rx)(struct mfc_vhba *, struct fc_frame *);
@@ -451,6 +452,8 @@ struct mfc_port {
 	int num_fexch_qps;
 	int log_num_fexch_per_vhba;
 	int initialized;
+	int fc_payload_size;
+	u8 fcoe_hlen;
 	struct mfc_bitmap fexch_bulk_bm;
 	struct list_head vhba_list;
 	spinlock_t lock;
@@ -464,6 +467,8 @@ struct mfc_port {
 	u8 wwpn[32];
 	struct mfc_fip fip_qp;
 	int link_up;
+	enum fip_state fip_mode;
+	struct fc_lport *lport;
 	struct delayed_work link_work;
 
 	/* sysfs */

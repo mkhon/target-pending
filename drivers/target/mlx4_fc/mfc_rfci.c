@@ -855,6 +855,20 @@ free_packet:
 	kfree_skb(skb);
 }
 
+#include <scsi/fc/fc_fip.h>
+
+struct fip_vlan_desc {
+        struct fip_desc fd_desc;
+        __u16           fd_vlan;
+} __attribute__((packed));
+
+struct fip_vlan_res {
+        struct ethhdr eh;
+        struct fip_header fh;
+        struct fip_mac_desc mac;
+        struct fip_vlan_desc vlan;
+} __attribute__((packed));
+
 int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 {
 	struct mfc_vhba *vhba = lport_priv(lp);
@@ -869,7 +883,10 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 	struct fcoe_crc_eof *cp;
 	struct fcoe_hdr *hp;
 	struct fcoe_hdr_old *ohp;
+	struct fip_vlan_res *msg;
 	int rc = 0;
+
+	printk("Entering mfc_frame_send >>>>>>>>>>>> lp: %p fp: %p\n", lp, fp);
 
 	if (!vhba->mfc_port->link_up)
 		return -EBUSY;
@@ -880,15 +897,26 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 
 	fh = fc_frame_header_get(fp);
 	skb = fp_skb(fp);
+#if 0
+	msg = (struct fip_vlan_res *)skb->data;
+	printk("mfc_frame_send using msg: %p\n", msg);
 
+	printk("mfc_frame_send: fip_op: 0x%04x fip_subcode: 0x%04x\n",
+		msg->fh.fip_op, msg->fh.fip_subcode);
+#else
+	printk("mfc_frame_send: fc_frame_payload_op: 0x%04x\n",
+			fc_frame_payload_op(fp));
+#endif
 	if (unlikely(fh->fh_r_ctl == FC_RCTL_ELS_REQ)) {
+		printk("mfc_frame_send: fh->fh_r_ctl == FC_RCTL_ELS_REQ\n");
+
 		if (fc_frame_payload_op(fp) == ELS_FLOGI) {
 			vhba->flogi_oxid = ntohs(fh->fh_ox_id);
 			vhba->rfci_rx_enabled = 1;
 			if (!fip_ctlrs[vhba->net_type - 1].els_send(vhba, skb)) {
 				fctgt_info("TX: FLOGI REQ\n");
-//				shost_printk(KERN_INFO, vhba->lp->host,
-//						"Send flogi over fip\n");
+				shost_printk(KERN_INFO, vhba->lp->host,
+						"Send flogi over fip\n");
 				goto out;
 			}
 		} else if (fc_frame_payload_op(fp) == ELS_LOGO &&
@@ -902,6 +930,7 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 	}
 
 	if (vhba->rfci.fc_qp.is_flushing) {
+		printk("mfc_frame_send: rfci.fc_qp.is_flushing=1\n");
 		rc = -1;
 		goto out_skb_free;
 	}
@@ -937,6 +966,13 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 		eh->h_proto = htons(ETH_P_FCOE);
 		memcpy(eh->h_dest, vhba->dest_addr, ETH_ALEN);
 		memcpy(eh->h_source, vhba->fc_mac, ETH_ALEN);
+		printk("mfc_send_frame: eh->h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
+			eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
+			eh->h_dest[4], eh->h_dest[5]);
+		 printk("mfc_send_frame: eh->h_source: 0x%02x %02x %02x %02x %02x %02x\n",
+			eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3],
+			eh->h_source[4], eh->h_source[5]);
+
 	} else if (vhba->net_type == NET_IB) {
 		skb->protocol = htons(FCOIB_SIG);
 		eh->h_proto = htons(FCOIB_SIG);
