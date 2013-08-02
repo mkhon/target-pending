@@ -1473,8 +1473,9 @@ static int fcoe_rcv(struct sk_buff *skb, struct net_device *netdev,
 	fh = (struct fc_frame_header *) skb_transport_header(skb);
 
 	if (ntoh24(&eh->h_dest[3]) != ntoh24(fh->fh_d_id)) {
-		FCOE_NETDEV_DBG(netdev, "FC frame d_id mismatch with MAC:%pM\n",
-				eh->h_dest);
+		FCOE_NETDEV_DBG(netdev, "FC frame eh->h_dest: 0x%08x d_id: 0x%08x"
+			" mismatch with MAC:%pM\n", ntoh24(&eh->h_dest[3]),
+			ntoh24(fh->fh_d_id), eh->h_dest);
 		goto err;
 	}
 

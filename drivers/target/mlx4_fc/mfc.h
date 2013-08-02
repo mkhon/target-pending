@@ -397,6 +397,7 @@ struct mfc_vhba {
 	struct mfctgt tgt;
 	struct fc_lport *lp;
 	struct mfc_port *mfc_port;
+	struct fcoe_ctlr *vhba_ctlr;
 	int idx;
 	int fc_mac_idx;
 	u8 fc_mac[ETH_ALEN];

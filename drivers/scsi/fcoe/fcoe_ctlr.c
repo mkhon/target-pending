@@ -673,9 +673,13 @@ int fcoe_ctlr_els_send(struct fcoe_ctlr *fip, struct fc_lport *lport,
 	fh = (struct fc_frame_header *)skb->data;
 	op = *(u8 *)(fh + 1);
 
+	printk("fcoe_ctlr_els_send: op: 0x%02x fip->state: 0x%08x fip->mode: 0x%04x\n",
+		op, fip->state, fip->mode);
+
 	if (op == ELS_FLOGI && fip->mode != FIP_MODE_VN2VN) {
 		old_xid = fip->flogi_oxid;
 		fip->flogi_oxid = ntohs(fh->fh_ox_id);
+		printk("fcoe_ctlr_els_send: #1\n");
 		if (fip->state == FIP_ST_AUTO) {
 			if (old_xid == FC_XID_UNKNOWN)
 				fip->flogi_count = 0;
@@ -685,16 +689,21 @@ int fcoe_ctlr_els_send(struct fcoe_ctlr *fip, struct fc_lport *lport,
 			fcoe_ctlr_map_dest(fip);
 			return 0;
 		}
+		printk("fcoe_ctlr_els_send: #2\n");
 		if (fip->state == FIP_ST_NON_FIP)
 			fcoe_ctlr_map_dest(fip);
 	}
 
+	printk("fcoe_ctlr_els_send: #3\n");
 	if (fip->state == FIP_ST_NON_FIP)
 		return 0;
+	printk("fcoe_ctlr_els_send: #4\n");
 	if (!fip->sel_fcf && fip->mode != FIP_MODE_VN2VN)
 		goto drop;
+	printk("fcoe_ctlr_els_send: #5\n");
 	switch (op) {
 	case ELS_FLOGI:
+		printk("fcoe_ctlr_els_send: ELS_FLOGI:\n");
 		op = FIP_DT_FLOGI;
 		if (fip->mode == FIP_MODE_VN2VN)
 			break;
@@ -706,11 +715,13 @@ int fcoe_ctlr_els_send(struct fcoe_ctlr *fip, struct fc_lport *lport,
 		schedule_work(&fip->timer_work);
 		return -EINPROGRESS;
 	case ELS_FDISC:
+		printk("fcoe_ctlr_els_send: ELS_FDISC:\n");
 		if (ntoh24(fh->fh_s_id))
 			return 0;
 		op = FIP_DT_FDISC;
 		break;
 	case ELS_LOGO:
+		printk("fcoe_ctlr_els_send: ELS_LOGO:\n");
 		if (fip->mode == FIP_MODE_VN2VN) {
 			if (fip->state != FIP_ST_VNMP_UP)
 				return -EINVAL;
@@ -725,6 +736,7 @@ int fcoe_ctlr_els_send(struct fcoe_ctlr *fip, struct fc_lport *lport,
 		op = FIP_DT_LOGO;
 		break;
 	case ELS_LS_ACC:
+		printk("fcoe_ctlr_els_send: ELS_LS_ACC:\n");
 		/*
 		 * If non-FIP, we may have gotten an SID by accepting an FLOGI
 		 * from a point-to-point connection.  Switch to using
@@ -741,11 +753,13 @@ int fcoe_ctlr_els_send(struct fcoe_ctlr *fip, struct fc_lport *lport,
 		}
 		/* fall through */
 	case ELS_LS_RJT:
+		printk("fcoe_ctlr_els_send: ELS_LS_RJT:\n");
 		op = fr_encaps(fp);
 		if (op)
 			break;
 		return 0;
 	default:
+		printk("fcoe_ctlr_els_send: default\n");
 		if (fip->state != FIP_ST_ENABLED &&
 		    fip->state != FIP_ST_VNMP_UP)
 			goto drop;
@@ -753,11 +767,14 @@ int fcoe_ctlr_els_send(struct fcoe_ctlr *fip, struct fc_lport *lport,
 	}
 	LIBFCOE_FIP_DBG(fip, "els_send op %u d_id %x\n",
 			op, ntoh24(fh->fh_d_id));
+	printk("fcoe_ctlr_els_send: before fcoe_ctlr_encaps\n");
 	if (fcoe_ctlr_encaps(fip, lport, op, skb, ntoh24(fh->fh_d_id)))
 		goto drop;
+	printk("fcoe_ctlr_els_send: before fip->send\n");
 	fip->send(fip, skb);
 	return -EINPROGRESS;
 drop:
+	printk("fcoe_ctlr_els_send: DROP >>>>>>>>>>>>>>>>>>.\n");
 	kfree_skb(skb);
 	return -EINVAL;
 }

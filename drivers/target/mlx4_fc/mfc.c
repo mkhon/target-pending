@@ -1047,7 +1047,7 @@ int mfc_flogi_finished(struct mfc_vhba *vhba, u8 *my_npid)
 	if (!memcmp(my_npid, vhba->my_npid.fid, 3) && vhba->flogi_finished)
 		return 0;
 
-	fctgt_info("Logged in to FABRIC. fid: %02x:%02x:%02x vhba=%d port=%d\n",
+	printk("Logged in to FABRIC. fid: %02x:%02x:%02x vhba=%d port=%d\n",
 		     my_npid[0], my_npid[1], my_npid[2],
 		     vhba->idx, vhba->mfc_port->port);
 
@@ -1283,6 +1283,19 @@ struct fc_lport *mfc_create_lport(struct mfc_port *fc_port, u64 wwpn, u64 wwnn,
                 return ERR_PTR(-ENOMEM);
 	}
 	printk("mfc_create_lport() Got vhba: %p >>>>>>>>>>>>>>>>>>>>>>>>>>>\n", vhba);
+	vhba->vhba_ctlr = ofc_ctlr;
+	printk("mfc_create_lport() Set vhba->vhba_ctlr: %p\n", vhba->vhba_ctlr);
+	printk("ofc_ctrl->ctl_src_addr 0x%02x %02x %02x %02x %02x %02x\n",
+		ofc_ctlr->ctl_src_addr[0], ofc_ctlr->ctl_src_addr[1],
+		ofc_ctlr->ctl_src_addr[2], ofc_ctlr->ctl_src_addr[3],
+		ofc_ctlr->ctl_src_addr[4], ofc_ctlr->ctl_src_addr[5]);
+	printk("ofc_ctrl->dest_addr 0x%02x %02x %02x %02x %02x %02x\n",
+		ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1],
+		ofc_ctlr->dest_addr[2], ofc_ctlr->dest_addr[3],
+		ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
+
+	mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
+	mfc_update_src_mac(vhba, ofc_ctlr->ctl_src_addr);
 #endif
 	if (!mfc_t11_mode) {
 		fc_port->fcoe_hlen = sizeof(struct fcoe_hdr_old);
@@ -1322,6 +1335,10 @@ struct fc_lport *mfc_create_lport(struct mfc_port *fc_port, u64 wwpn, u64 wwnn,
 	}
 
 	if (fip_ctlr->start_fcoe_ctlr) {
+#if 1
+		lp->tt.elsct_send = fip_ctlr->elsct_send;
+		printk("Setup lp->tt.elsct_send to fip_ctlr->elsct_send\n");
+#endif
 		fip_ctlr->start_fcoe_ctlr(fc_port, ofc_ctlr);
 	}
 
@@ -1385,6 +1402,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 		goto err_lport_destroy;
 	}
 	vhba->idx = idx;
+	printk("Set vhba->idx: %u>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.\n");
 	vhba->mfc_port = fc_port;
 	vhba->fc_mac_idx = -1;
 	/* TODO: needed? */

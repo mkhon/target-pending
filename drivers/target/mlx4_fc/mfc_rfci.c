@@ -896,6 +896,9 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 	//	return -EBUSY;
 
 	fh = fc_frame_header_get(fp);
+        printk("mfc_frame_send: #1 fh->fh_d_id: 0x%02x %02x %02x\n",
+                  fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
+
 	skb = fp_skb(fp);
 #if 0
 	msg = (struct fip_vlan_res *)skb->data;
@@ -904,8 +907,8 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 	printk("mfc_frame_send: fip_op: 0x%04x fip_subcode: 0x%04x\n",
 		msg->fh.fip_op, msg->fh.fip_subcode);
 #else
-	printk("mfc_frame_send: fc_frame_payload_op: 0x%04x\n",
-			fc_frame_payload_op(fp));
+	printk("mfc_frame_send: fh_r_ctl: 0x%04x fc_frame_payload_op: 0x%04x\n",
+			fh->fh_r_ctl, fc_frame_payload_op(fp));
 #endif
 	if (unlikely(fh->fh_r_ctl == FC_RCTL_ELS_REQ)) {
 		printk("mfc_frame_send: fh->fh_r_ctl == FC_RCTL_ELS_REQ\n");
@@ -962,8 +965,13 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 	eh = eth_hdr(skb);
 
 	if (vhba->net_type == NET_ETH) {
+		struct fcoe_ctlr *ofc_ctlr = vhba->vhba_ctlr;
+
 		skb->protocol = htons(ETH_P_FCOE);
 		eh->h_proto = htons(ETH_P_FCOE);
+
+		mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
+
 		memcpy(eh->h_dest, vhba->dest_addr, ETH_ALEN);
 		memcpy(eh->h_source, vhba->fc_mac, ETH_ALEN);
 		printk("mfc_send_frame: eh->h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
@@ -972,6 +980,14 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 		 printk("mfc_send_frame: eh->h_source: 0x%02x %02x %02x %02x %02x %02x\n",
 			eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3],
 			eh->h_source[4], eh->h_source[5]);
+
+		printk("mfc_send_frame: #2 fh->fh_d_id: 0x%02x %02x %02x\n",
+			fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
+		fh->fh_d_id[0] = eh->h_dest[3];
+		fh->fh_d_id[1] = eh->h_dest[4];
+		fh->fh_d_id[2] = eh->h_dest[5];
+		printk("mfc_send_frame: #3 fh->fh_d_id: 0x%02x %02x %02x\n",
+			fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
 
 	} else if (vhba->net_type == NET_IB) {
 		skb->protocol = htons(FCOIB_SIG);

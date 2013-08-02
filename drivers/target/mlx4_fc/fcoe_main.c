@@ -152,6 +152,7 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 {
 	struct mlx4_fcoe_fip *fip = (struct mlx4_fcoe_fip *)mfc_port->mfc_fip_ctlr;
 	struct fip_vlan_res *msg;
+	struct fcoe_ctlr *ofc_ctlr;
 
 	msg = (struct fip_vlan_res *)skb->data;
 
@@ -163,6 +164,18 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 
 	printk("msg->fh.fip_op: 0x%04x msg->fh.fip_subcode: 0x%04x\n",
 		msg->fh.fip_op, msg->fh.fip_subcode);
+	printk("fip_rx msg->mac.fd_mac: 0x%02x %02x %02x %02x %02x %02x\n",
+		msg->mac.fd_mac[0], msg->mac.fd_mac[1], msg->mac.fd_mac[2],
+		msg->mac.fd_mac[3], msg->mac.fd_mac[4], msg->mac.fd_mac[5]);
+	if (msg->fh.fip_op == htons(FIP_OP_VN2VN)) {
+		ofc_ctlr = &fip->selected_fcf.fcf->ofc_ctlr;
+
+		memcpy(ofc_ctlr->dest_addr, &msg->mac.fd_mac[0], ETH_ALEN);
+		printk("Set ofc_ctlr->dest_addr from FIP_OP_VN2VN msg->mac.fd_mac\n");
+		printk("ofc_ctlr->dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
+			ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
+			ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
+	}
 
 	if ((msg->fh.fip_op == htons(FIP_OP_VLAN)) &&
 			(msg->fh.fip_subcode == FIP_SC_VL_REP)) {
@@ -179,7 +192,6 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 #endif
 	printk("fip_rx: fip->selected_fcf.fcf: %p fip->selected_fcf.vlan_id: %u\n",
 			fip->selected_fcf.fcf, fip->selected_fcf.vlan_id);
-
 	/* other FIP messages forwarded to internal OFC FIP controller */
 #if 0
 	if (fip->selected_fcf.fcf &&
@@ -201,15 +213,15 @@ out_free_skb:
 
 static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 {
-	struct fcf *fcf = arg;
-	struct mfc_vhba *vhba = fcf->vhba;
+	struct mfc_vhba *vhba = arg;
+	struct fcoe_ctlr *ofc_ctlr = vhba->vhba_ctlr;
 //	struct fc_lport *lport = vhba->lp;
 	u8 *mac;
 
 	printk("fcoe_main: flogi_resp >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
 
 	fctgt_dbg("RX: FLOGI RES\n");
-//	printk("Got flogi response: err: %ld\n", IS_ERR(fp));
+	printk("Got flogi response: err: %ld\n", IS_ERR(fp));
 	if (IS_ERR(fp))
 		goto done;
 
@@ -222,12 +234,29 @@ static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 		}
 	}
 	*/
+	printk("flogi_resp: granted_mac: 0x%02x %02x %02x %02x %02x %02x\n",
+		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
 	ASSERT(vhba->net_type == NET_ETH);
 
 	/* TODO: take prio from DCBX, or let mlx4_fc do that */
-	mfc_update_gw_addr_eth(vhba, fcf->ofc_ctlr.dest_addr, 3);
+	printk("flogi_resp: Calling mfc_update_gw_addr_eth >>>>>>>>>>>>>\n");
+	printk("flogi_resp: ofc_ctlr.dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
+		ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
+		ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
+	mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
+#if 0
+	printk("flogi_resp: Calling mfc_update_src_mac >>>>>>>>>>>>>>>>\n");
 	mfc_update_src_mac(vhba, mac);
+#endif
+	printk("flogi_resp: Calling mfc_flogi_finished fh_d_id: 0x%02x %02x %02x >>>>>>>>>>>>>>>>>>>.\n", fc_frame_header_get(fp)->fh_d_id[0],
+		fc_frame_header_get(fp)->fh_d_id[1], fc_frame_header_get(fp)->fh_d_id[2]);
+	fc_frame_header_get(fp)->fh_d_id[0] = 0x08;
+	fc_frame_header_get(fp)->fh_d_id[1] = 0xad;
+	fc_frame_header_get(fp)->fh_d_id[2] = 0x86;
+	printk("Reset fh_d_id: 0x%02x %02x %02x >>>>>>>>>>>>>>>>>>>.\n", fc_frame_header_get(fp)->fh_d_id[0],
+                fc_frame_header_get(fp)->fh_d_id[1], fc_frame_header_get(fp)->fh_d_id[2]);
+
 	mfc_flogi_finished(vhba, fc_frame_header_get(fp)->fh_d_id);
 done:
 	printk("flogi_resp for mlx4_fcoe(): Before fc_lport_flogi_resp\n");
@@ -242,8 +271,7 @@ done:
 
 static void logo_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 {
-	struct fcf *fcf = arg;
-	struct mfc_vhba *vhba = fcf->vhba;
+	struct mfc_vhba *vhba = arg;
 	struct fc_lport *lport = vhba->lp;
 	static u8 zero_mac[ETH_ALEN] = { 0 };
 
@@ -262,22 +290,31 @@ static struct fc_seq *elsct_send(struct fc_lport *lport, u32 did,
 						   u32 timeout)
 {
 	struct mfc_vhba *vhba = lport_priv(lport);
-	struct fcf *fcf = vhba_priv(vhba);
+	struct fcoe_ctlr *ofc_ctlr = vhba->vhba_ctlr;
 	struct fc_frame_header *fh = fc_frame_header_get(fp);
+	u8 fh_d_id[3];
 
-	printk("fcoe_main: elsct_send fc_frame_payload_op(fp): 0x%04x >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n", fc_frame_payload_op(fp));
+	printk("fcoe_main: elsct_send op: 0x%08x fc_frame_payload_op(fp): 0x%04x >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n", op, fc_frame_payload_op(fp));
+	printk("fcoe_main: elsct_send fh: did: 0x%08x fh_d_id: 0x%02x %02x %02x\n",
+		did, fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
 
 	switch (op) {
 	case ELS_FLOGI:
+#if 0
+		printk("Calling mfc_update_gw_addr_eth for ofc_ctlr->dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
+			ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
+			ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
+		mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
+#endif
 	case ELS_FDISC:
 		return fc_elsct_send(lport, did, fp, op, flogi_resp,
-				     fcf, timeout);
+				     vhba, timeout);
 	case ELS_LOGO:
 		/* only hook onto fabric logouts, not port logouts */
 		if (ntoh24(fh->fh_d_id) != FC_FID_FLOGI)
 			break;
 		return fc_elsct_send(lport, did, fp, op, logo_resp,
-				     fcf, timeout);
+				     vhba, timeout);
 	}
 	return fc_elsct_send(lport, did, fp, op, resp, arg, timeout);
 }
@@ -338,11 +375,12 @@ static struct fcoe_ctlr *create_fcoe_ctlr(struct mfc_port *mfc_port)
 	vhba->lp->tt.elsct_send = elsct_send;
 #endif
 	/* setup Source Mac Address */
-	if (!fcf->ofc_ctlr.spma) {
+	printk("fcf->ofc_ctlr.spma: 0x%02x\n", fcf->ofc_ctlr.spma);
+//	if (!fcf->ofc_ctlr.spma) {
 		printk("Setting fcf->ofc_ctlr.ctl_src_addr from mfc_port->def_mac >>>>>>>>>>>>>>>>>\n");
 		memcpy(fcf->ofc_ctlr.ctl_src_addr, fip->mfc_port->def_mac,
 		       ETH_ALEN);
-	}
+//	}
 
 	return &fcf->ofc_ctlr;
 }
@@ -366,12 +404,13 @@ static void start_fcoe_ctlr(struct mfc_port *mfc_port, struct fcoe_ctlr *ctlr)
 
 static int els_send(struct mfc_vhba *vhba, struct sk_buff *skb)
 {
-	struct fcf *fcf = vhba_priv(vhba);
+//	struct fcf *fcf = vhba_priv(vhba);
+	struct fcoe_ctlr *ctlr = vhba->vhba_ctlr;
 
 	if (!vhba->mfc_port->link_up)
 		return 0;
 
-	return !fcoe_ctlr_els_send(&fcf->ofc_ctlr, vhba->lp, skb);
+	return !fcoe_ctlr_els_send(ctlr, vhba->lp, skb);
 }
 
 static void send_vlan_request(struct mlx4_fcoe_fip *fip)
@@ -416,6 +455,7 @@ static void send_vlan_request(struct mlx4_fcoe_fip *fip)
 void vlan_req_work(struct work_struct *work)
 {
 	struct mlx4_fcoe_fip *fip = container_of(work, struct mlx4_fcoe_fip, vlan_req_work.work);
+	dump_stack();
 	send_vlan_request(fip);
 }
 
@@ -425,9 +465,12 @@ static void link_state_changed(struct mfc_port *mfc_port)
 	struct fcf *fcf = fip->selected_fcf.fcf;
 
 	if (!fcf) {
+#warning FIXME: schedule_delayed_work disabled in link_state_changed
+#if 0
 		if (mfc_port->link_up)
 			schedule_delayed_work(&fip->vlan_req_work,
 					2 * HZ);
+#endif
 		return;
 	}
 
@@ -488,10 +531,11 @@ static void add_port(struct mfc_port *mfc_port)
 	mfc_port->mfc_fip_ctlr = fip;
 	INIT_WORK(&fip->create_vhba_work, create_vhba);
 	INIT_DELAYED_WORK(&fip->vlan_req_work, vlan_req_work);
-
+#warning FIXME: schedule_delayed_work disabled in add_port
+#if 0
 	if (mfc_port->link_up)
 		schedule_delayed_work(&fip->vlan_req_work, 1 * HZ);
-
+#endif
 	return;
 }
 
