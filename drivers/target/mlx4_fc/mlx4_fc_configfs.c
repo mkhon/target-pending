@@ -342,6 +342,8 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 
 	printk("Using mfc_port for configfs_wwpn wwpn: 0x%016lx wwnn: 0x%016lx\n",
 		port->port_wwpn, port->port_wwnn);
+	printk("mfc_port->mfc_dev->dev->caps.steering_mode: 0x%02x\n",
+		mfc_port->mfc_dev->dev->caps.steering_mode);
 
 	return &port->port_wwn;
 }

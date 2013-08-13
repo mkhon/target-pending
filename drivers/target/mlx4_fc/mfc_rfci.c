@@ -178,6 +178,8 @@ static void mfc_rfci_rx_comp(void *arg, struct mlx4_cqe *cqe)
 	struct mfc_rfci_rx_info *fr;
 	int err;
 
+	printk("Entering mfc_rfci_rx_comp !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+
 	index = be16_to_cpu(cqe->wqe_index) & rq->size_mask;
 	rx_desc = rq->buf + (index * rq->stride);
 	pci_unmap_single(vhba->mfc_port->mfc_dev->dev->pdev,
@@ -433,7 +435,8 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 		.flags = cpu_to_be32(QPC_SERVICE_TYPE_RFCI << 16),
 		.pd = cpu_to_be32(mfc_dev->priv_pdn),
 		/* Raw-ETH requirement */
-		.mtu_msgmax = 0x77,
+//		.mtu_msgmax = 0x77,
+		.mtu_msgmax = 0xff,
 		.sq_size_stride = ilog2(mfc_num_reserved_xids) << 3 |
 				  ilog2(RFCI_SQ_BB_SIZE >> 4),
 		.rq_size_stride = ilog2(mfc_num_reserved_xids) << 3 |
@@ -451,7 +454,7 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 		/* we can assume that db.dma is aligned */
 		.db_rec_addr = cpu_to_be64(qp->wqres.db.dma),
 		.srqn = 0,
-		.qkey = cpu_to_be32(MLX4_FCOIB_QKEY),
+//		.qkey = cpu_to_be32(MLX4_FCOIB_QKEY),
 	};
 
 	err = mlx4_qp_to_ready(mfc_dev->dev, &qp->wqres.mtt, &context,
@@ -468,6 +471,7 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 	}
 
 	if (vhba->net_type == NET_ETH) {
+#if 1
 		err = mlx4_register_mac(mfc_dev->dev, fc_port->port,
 				mac_to_u64(vhba->fc_mac));
 		if (err) {
@@ -486,16 +490,23 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 				goto err_unreg_mac;
 			}
 		}
-
+#endif
 		memcpy(&vhba->steer_gid[10], vhba->fc_mac, ETH_ALEN);
 		vhba->steer_gid[4] = 0; /* vep_num */
 		vhba->steer_gid[5] = fc_port->port;
+#if 0
 		vhba->steer_gid[7] = MLX4_UC_STEER << 1 |
 			1 << 0 |	/* vlan present */
 			1 << 2;		/* check vlan */
 		*(u16 *)(&vhba->steer_gid[8]) = cpu_to_be16(vhba->fc_vlan_id & 0x0fff);
+#else
+		vhba->steer_gid[7] = MLX4_UC_STEER << 1 |
+			1 << 3;                 /* check ethertype */
+		vhba->steer_gid[2] = 0x89;
+		vhba->steer_gid[3] = 0x06;
+#endif
 		err = mlx4_qp_attach_common(mfc_dev->dev, &rfci->fc_qp.mqp,
-				vhba->steer_gid, 0, MLX4_PROT_ETH,
+				vhba->steer_gid, 0, MLX4_PROT_FCOE,
 				MLX4_UC_STEER);
 		if (err) {
 			shost_printk(KERN_ERR, vhba->lp->host,
@@ -503,7 +514,9 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 					vhba->idx, fc_port->port);
 			goto err_unreg_vlan;
 		}
+		printk("Successfully setup rfci->fc_qp >>>>>>>>>>>>>>>>>>>\n");
 	}
+	printk("Done with mfc_init_rfci\n");
 	rfci->fc_qp.is_flushing = 0;
 	rfci->initialized = 1;
 
@@ -983,9 +996,19 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 
 		printk("mfc_send_frame: #2 fh->fh_d_id: 0x%02x %02x %02x\n",
 			fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
+#if 0
 		fh->fh_d_id[0] = eh->h_dest[3];
 		fh->fh_d_id[1] = eh->h_dest[4];
 		fh->fh_d_id[2] = eh->h_dest[5];
+#else
+		if (memcpy(eh->h_dest, fh->fh_d_id, 3)) {
+			printk("Fixing up eh->h_dest different from fh_d_id\n");
+			dump_stack();
+			eh->h_dest[3] = fh->fh_d_id[0];
+			eh->h_dest[4] = fh->fh_d_id[1];
+			eh->h_dest[5] = fh->fh_d_id[2];
+		}
+#endif
 		printk("mfc_send_frame: #3 fh->fh_d_id: 0x%02x %02x %02x\n",
 			fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
 

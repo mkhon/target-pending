@@ -1063,6 +1063,7 @@ int mfc_flogi_finished(struct mfc_vhba *vhba, u8 *my_npid)
 				     vhba->idx, vhba->mfc_port->port, err);
 			goto out;
 		}
+		printk("Completed mfc_init_rfci >>>>>>>>>>>>>>>>>>>..\n");
 	}
 
 	if ((vhba->idx < 0) || (vhba->idx >= MFC_NUM_NPORT_IDS)) {
@@ -1092,6 +1093,7 @@ int mfc_flogi_finished(struct mfc_vhba *vhba, u8 *my_npid)
 				     vhba->idx, fc_port->port, err);
 			goto err;
 		}
+		printk("Completed mfc_init_fexchs >>>>>>>>>>>>>>>>>>>>>>>>>>..\n");
 	}
 
 	vhba->flogi_finished++;

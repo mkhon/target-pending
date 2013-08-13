@@ -94,8 +94,23 @@ static void fip_send(struct fcoe_ctlr *ofc_ctlr, struct sk_buff *skb)
 {
 	struct fcf *fcf = container_of(ofc_ctlr, struct fcf, ofc_ctlr);
 	struct mlx4_fcoe_fip *fip = fcf->fcoe_fip;
+	struct fip_vlan_res *msg;
 
-	printk("fcoe_main: fip_send >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+	msg = (struct fip_vlan_res *)skb->data;
+
+	printk("fip_send: fip_send >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+        printk("fip_send Outgoing fip_op: 0x%04x fip_subcode: 0x%04x\n",
+              msg->fh.fip_op, msg->fh.fip_subcode);
+        printk("fip_send: eh.h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
+                msg->eh.h_dest[0], msg->eh.h_dest[1], msg->eh.h_dest[2],
+                msg->eh.h_dest[3], msg->eh.h_dest[4], msg->eh.h_dest[5]);
+        printk("fip_send: eh.h_source: 0x%02x %02x %02x %02x %02x %02x\n",
+                msg->eh.h_source[0], msg->eh.h_source[1], msg->eh.h_source[2],
+                msg->eh.h_source[3], msg->eh.h_source[4], msg->eh.h_source[5]);
+        printk("fip_send msg->mac.fd_mac: 0x%02x %02x %02x %02x %02x %02x\n",
+                msg->mac.fd_mac[0], msg->mac.fd_mac[1], msg->mac.fd_mac[2],
+                msg->mac.fd_mac[3], msg->mac.fd_mac[4], msg->mac.fd_mac[5]);
+
 
 	mfc_fip_tx(fip->mfc_port, skb, fip->selected_fcf.vlan_id, 3);
 }
@@ -162,20 +177,42 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 		goto out_free_skb;
 	}
 
+	printk("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
 	printk("msg->fh.fip_op: 0x%04x msg->fh.fip_subcode: 0x%04x\n",
 		msg->fh.fip_op, msg->fh.fip_subcode);
+	printk("fip_rx: msg->eh.h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
+		msg->eh.h_dest[0], msg->eh.h_dest[1], msg->eh.h_dest[2],
+		msg->eh.h_dest[3], msg->eh.h_dest[4], msg->eh.h_dest[5]);
+	printk("fip_rx: msg->eh.h_source: 0x%02x %02x %02x %02x %02x %02x\n",
+		msg->eh.h_source[0], msg->eh.h_source[1], msg->eh.h_source[2],
+		msg->eh.h_source[3], msg->eh.h_source[4], msg->eh.h_source[5]);
 	printk("fip_rx msg->mac.fd_mac: 0x%02x %02x %02x %02x %02x %02x\n",
 		msg->mac.fd_mac[0], msg->mac.fd_mac[1], msg->mac.fd_mac[2],
 		msg->mac.fd_mac[3], msg->mac.fd_mac[4], msg->mac.fd_mac[5]);
-	if (msg->fh.fip_op == htons(FIP_OP_VN2VN)) {
-		ofc_ctlr = &fip->selected_fcf.fcf->ofc_ctlr;
-
-		memcpy(ofc_ctlr->dest_addr, &msg->mac.fd_mac[0], ETH_ALEN);
-		printk("Set ofc_ctlr->dest_addr from FIP_OP_VN2VN msg->mac.fd_mac\n");
-		printk("ofc_ctlr->dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
-			ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
-			ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
+#if 0
+	if (msg->fh.fip_op != htons(FIP_OP_VN2VN)) {
+		printk("fip_rx: Skipping non FIP_OP_VN2VN fip_op: 0x%02x"
+			" for local MAC\n", msg->fh.fip_op);
+		return;
 	}
+#endif
+	ofc_ctlr = &fip->selected_fcf.fcf->ofc_ctlr;
+#if 0
+	memcpy(ofc_ctlr->dest_addr, &msg->mac.fd_mac[0], ETH_ALEN);
+	printk("Set ofc_ctlr->dest_addr from FIP_OP_VN2VN msg->mac.fd_mac\n");
+	printk("ofc_ctlr->dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
+		ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
+		ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
+#else
+#warning FIXME: Hardcoded initiator physical mac
+	ofc_ctlr->dest_addr[0] = 0x00;
+	ofc_ctlr->dest_addr[1] = 0x02;
+	ofc_ctlr->dest_addr[2] = 0xc9;
+	ofc_ctlr->dest_addr[3] = 0x08;
+	ofc_ctlr->dest_addr[4] = 0xad;
+	ofc_ctlr->dest_addr[5] = 0x86;
+	printk("Set hardcoded ofc_ctlr->dest_addr >>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+#endif
 
 	if ((msg->fh.fip_op == htons(FIP_OP_VLAN)) &&
 			(msg->fh.fip_subcode == FIP_SC_VL_REP)) {
@@ -201,6 +238,7 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 		fcoe_ctlr_recv(&fip->selected_fcf.fcf->ofc_ctlr, skb);
 	}
 #else
+//	skb_reset_mac_header(skb);
 	skb->data = skb_pull(skb, sizeof(struct ethhdr));
 	fcoe_ctlr_recv(&fip->selected_fcf.fcf->ofc_ctlr, skb);
 #endif
@@ -216,7 +254,7 @@ static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 	struct mfc_vhba *vhba = arg;
 	struct fcoe_ctlr *ofc_ctlr = vhba->vhba_ctlr;
 //	struct fc_lport *lport = vhba->lp;
-	u8 *mac;
+	u8 *mac, new_mac[ETH_ALEN];
 
 	printk("fcoe_main: flogi_resp >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
 
@@ -245,10 +283,19 @@ static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 		ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
 		ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
 	mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
-#if 0
-	printk("flogi_resp: Calling mfc_update_src_mac >>>>>>>>>>>>>>>>\n");
-	mfc_update_src_mac(vhba, mac);
+#if 1
+#warning FIXME: Hardcoded fcoe target mac
+	memset(&new_mac[0], 0, ETH_ALEN);
+	new_mac[0] = 0x0e;
+	new_mac[1] = 0xfd;
+	new_mac[2] = 0x00;
+	new_mac[3] = 0x00;
+	new_mac[4] = 0xe3;
+	new_mac[5] = 0x1e;
+	printk("flogi_resp: Calling mfc_update_src_mac with hardcoded FCoE MAC>>>>>>>>>>>>>>>>\n");
+	mfc_update_src_mac(vhba, &new_mac[0]);
 #endif
+#if 0
 	printk("flogi_resp: Calling mfc_flogi_finished fh_d_id: 0x%02x %02x %02x >>>>>>>>>>>>>>>>>>>.\n", fc_frame_header_get(fp)->fh_d_id[0],
 		fc_frame_header_get(fp)->fh_d_id[1], fc_frame_header_get(fp)->fh_d_id[2]);
 	fc_frame_header_get(fp)->fh_d_id[0] = 0x08;
@@ -256,11 +303,19 @@ static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 	fc_frame_header_get(fp)->fh_d_id[2] = 0x86;
 	printk("Reset fh_d_id: 0x%02x %02x %02x >>>>>>>>>>>>>>>>>>>.\n", fc_frame_header_get(fp)->fh_d_id[0],
                 fc_frame_header_get(fp)->fh_d_id[1], fc_frame_header_get(fp)->fh_d_id[2]);
-
-	mfc_flogi_finished(vhba, fc_frame_header_get(fp)->fh_d_id);
+#endif
+//	mfc_flogi_finished(vhba, fc_frame_header_get(fp)->fh_d_id);
+	mfc_flogi_finished(vhba, &new_mac[3]);
 done:
+#if 0
+#if 0
 	printk("flogi_resp for mlx4_fcoe(): Before fc_lport_flogi_resp\n");
 	fc_lport_flogi_resp(seq, fp, vhba->lp);
+#else
+	printk("flogi_resp for mlx4_fcoe(): Before  vhba->lp->tt.rport_recv_req\n");
+	vhba->lp->tt.rport_recv_req(vhba->lp, fp);
+#endif
+#endif
 #if 0
 	fctgt_notify_flogi_acc(vhba, seq, fp);
 #else
