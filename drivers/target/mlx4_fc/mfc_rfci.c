@@ -35,6 +35,7 @@
 #include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/etherdevice.h>
+#include <linux/dma-direction.h>
 
 #include <linux/mlx4/driver.h>
 #include <linux/mlx4/cmd.h>
@@ -43,6 +44,7 @@
 
 #include <scsi/libfc.h>
 #include <scsi/fc_encode.h>
+#include <scsi/scsi_tcq.h>
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
 
@@ -757,8 +759,10 @@ static int mfc_handle_prli(struct fc_frame *fp, struct mfc_vhba *vhba)
 	struct mlx4_fc_tpg *tpg;
 	struct mfc_port *mfc_port;
 	unsigned char wwpn[32];
+	int num_tags = vhba->num_fexch + (vhba->num_fexch / 2);
 
-	se_sess = transport_init_session();
+	se_sess = transport_init_session_tags(num_tags,
+					      sizeof(struct mfc_cmd));
 	if (!se_sess)
 		return -ENOMEM;
 
@@ -776,11 +780,97 @@ static int mfc_handle_prli(struct fc_frame *fp, struct mfc_vhba *vhba)
 		return -EINVAL;
 	}
 
-	vhba->vha_sess = se_sess;
+	vhba->vhba_sess = se_sess;
 	__transport_register_session(se_tpg, se_sess->se_node_acl,
 				     se_sess, vhba);
 
 	return 0;
+}
+
+static void mfc_fcp_scsi_rx(struct fc_frame *fp, struct mfc_vhba *vhba)
+{
+	struct fcp_cmnd *fcp;
+	struct fc_frame_header *fh;
+	struct mfc_cmd *mfc_cmd;
+	struct mfc_exch *fexch;
+	struct se_cmd *se_cmd;
+	struct se_session *se_sess;
+	struct trans_start *ts;
+	unsigned int unpacked_lun, data_length;
+	int tag, task_attr, rc;
+	enum dma_data_direction data_dir;
+
+	fcp = fc_frame_payload_get(fp, FCP_CMND_LEN);
+	if (!fcp) {
+		pr_err("Frame too small. Couldn't get fcp\n");
+		return;
+	}
+	fh = fc_frame_header_get(fp);
+
+	se_sess = vhba->vhba_sess;
+
+	tag = percpu_ida_alloc(&se_sess->sess_tag_pool, GFP_KERNEL);
+	mfc_cmd = &((struct mfc_cmd *)se_sess->sess_cmd_map)[tag];
+	memset(mfc_cmd, 0, sizeof(struct mfc_cmd));
+
+	ts = &mfc_cmd->ts;
+	memcpy((void *)&mfc_cmd->fcp_cmd, fcp, FCP_CMND_LEN);
+	ts->rport_id = ntoh24(fh->fh_s_id);
+	ts->remote_exch_id = ntohs(fh->fh_ox_id);
+
+	ts->local_exch_id = mfc_bitmap_slot_alloc(&vhba->fexch_bm, 0);
+	if (ts->local_exch_id == -1) {
+		pr_err("No free exchange on vhba=%d port=%d\n",
+			vhba->idx, vhba->mfc_port->port);
+#warning FIXME: Fix tag leak
+		return;
+	}
+
+	fexch = &vhba->fexch[ts->local_exch_id];
+	fexch->context = (void *)ts;
+
+	se_cmd = &mfc_cmd->se_cmd;
+	unpacked_lun = scsilun_to_int(&fcp->fc_lun);
+	data_length = htonl(fcp->fc_dl);
+
+	switch (fcp->fc_flags & (FCP_CFL_RDDATA | FCP_CFL_WRDATA)) {
+	case 0:
+		data_dir = DMA_NONE;
+		break;
+	case FCP_CFL_RDDATA:
+		data_dir = DMA_FROM_DEVICE;
+		break;
+	case FCP_CFL_WRDATA:
+		data_dir = DMA_TO_DEVICE;
+		break;
+	case FCP_CFL_WRDATA | FCP_CFL_RDDATA:
+		pr_err("BIDI not supported by mfc_target yet..\n");
+		BUG_ON(1);
+	}
+
+	switch (fcp->fc_pri_ta & FCP_PTA_MASK) {
+	case FCP_PTA_HEADQ:
+		task_attr = MSG_HEAD_TAG;
+		break;
+	case FCP_PTA_ORDERED:
+		task_attr = MSG_ORDERED_TAG;
+		break;
+	case FCP_PTA_ACA:
+		task_attr = MSG_ACA_TAG;
+		break;
+	case FCP_PTA_SIMPLE: /* Fallthrough */
+	default:
+		task_attr = MSG_SIMPLE_TAG;
+		break;
+	}
+	
+	rc = target_submit_cmd(se_cmd, se_sess, &fcp->fc_cdb[0],
+			       &mfc_cmd->sense_buf[0], unpacked_lun,
+			       data_length, task_attr, data_dir,
+			       TARGET_SCF_ACK_KREF);
+	if (rc < 0)
+#warning FIXME: Fix tag leak
+		return;
 }
 
 static void mfc_rx_rfci(struct work_struct *work)
@@ -870,16 +960,15 @@ static void mfc_rx_rfci(struct work_struct *work)
 
        case FC_RCTL_DD_UNSOL_CMD:
                if (fh->fh_type == FC_TYPE_FCP) {
-                       pr_debug("%s: DD_UNSOL_CMD 0x_id %hx\n",
-                                __func__, ntohs(fh->fh_ox_id));
-                       HEXDUMP(skb->data, fr_len);
-                       /* FIXME: calling TCM core for new scsi command coming in */
-                       return;
-               } else
-                       pr_err("%s: DD_UNSOL_CMD not FC_TYPE_FCP\n", __func__);
+			pr_debug("%s: DD_UNSOL_CMD 0x_id %hx\n",
+				 __func__, ntohs(fh->fh_ox_id));
+			HEXDUMP(skb->data, fr_len);
 
-               break;
-
+			mfc_fcp_scsi_rx(fp, vhba);
+			return;
+		}
+		pr_err("%s: DD_UNSOL_CMD not FC_TYPE_FCP\n", __func__);
+		break;
        case FC_RCTL_DD_CMD_STATUS:
        case FC_RCTL_DD_DATA_DESC:
        case FC_RCTL_DD_SOL_DATA:

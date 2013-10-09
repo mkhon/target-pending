@@ -339,10 +339,14 @@ struct mfc_rfci {
 	int initialized;
 };
 
+#if 0
+
 struct mfc_cmd {
 	struct mfc_qp fc_qp;
 	struct mfc_cq fc_cq;
 };
+
+#endif
 
 enum mfc_exch_state {
 	FEXCH_OK = 1,
@@ -641,6 +645,13 @@ struct trans_start {
 	u32 tgt_buf_id;
 
 	int (*done)(struct mfc_vhba *, struct trans_start *);
+};
+
+struct mfc_cmd {
+	struct trans_start ts;
+	struct se_cmd se_cmd;
+	struct fcp_cmnd fcp_cmd;
+	unsigned char sense_buf[TRANSPORT_SENSE_BUFFER];
 };
 
 static inline void *vhba_priv(const struct mfc_vhba *vhba)
