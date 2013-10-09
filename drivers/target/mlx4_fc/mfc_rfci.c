@@ -748,6 +748,13 @@ static int mfc_recv_abort_reply(struct fc_frame *fp, struct mfc_vhba *vhba)
 	return 0;
 }
 
+static int mfc_handle_prli(struct fc_frame *fp, struct mfc_vhba *vhba)
+{
+
+       pr_err("%s: PRLI req - need to create TCM session\n", __func__);
+       return 0;
+}
+
 static void mfc_rx_rfci(struct work_struct *work)
 {
 	struct mfc_rfci_rx_info *fr =
@@ -820,40 +827,40 @@ static void mfc_rx_rfci(struct work_struct *work)
 
 	fh = fc_frame_header_get(fp);
 
-	if (fh->fh_r_ctl == FC_RCTL_BA_ACC || fh->fh_r_ctl == FC_RCTL_BA_RJT) {
+       switch (fh->fh_r_ctl) {
+       case FC_RCTL_BA_ACC:
+       case FC_RCTL_BA_RJT:
 		rc = mfc_recv_abort_reply(fp, vhba);
 		if (!rc)
 			goto free_packet;
-	}
+               break;
 
-	if (vhba->fcp_req_rx &&
-			fh->fh_r_ctl == FC_RCTL_DD_UNSOL_CMD &&
-			fh->fh_type == FC_TYPE_FCP) {
-#if 0
-		shost_printk(KERN_WARNING, vhba->lp->host,
-			"RFCI RX: RCTL=DD_UNSOL_CMD/DD_CMD_STATUS (%x), ox_id %hx.\n",
-			fh->fh_r_ctl, ntohs(fh->fh_ox_id));
-		HEXDUMP(skb->data, fr_len);
+       case FC_RCTL_ELS_REQ:
+               if (fc_frame_payload_op(fp) == ELS_PRLI)
+                       mfc_handle_prli(fp, vhba);
+               break;
 
-		shost_printk(KERN_WARNING, vhba->lp->host, "FIBER Channel:\n");
-		HEXDUMP(skb->data, 0x18);
+       case FC_RCTL_DD_UNSOL_CMD:
+               if (fh->fh_type == FC_TYPE_FCP) {
+                       pr_debug("%s: DD_UNSOL_CMD 0x_id %hx\n",
+                                __func__, ntohs(fh->fh_ox_id));
+                       HEXDUMP(skb->data, fr_len);
+                       /* FIXME: calling TCM core for new scsi command coming in */
+                       return;
+               } else
+                       pr_err("%s: DD_UNSOL_CMD not FC_TYPE_FCP\n", __func__);
 
-		shost_printk(KERN_WARNING, vhba->lp->host, "FCP_CMND:\n");
-		HEXDUMP(skb->data + 0x18, 0x24);
+               break;
 
-		shost_printk(KERN_WARNING, vhba->lp->host, "SCSI_CDB:\n");
-		HEXDUMP(skb->data + 0x18 + 0x24, 0x10 - 4);
-#endif
-		vhba->fcp_req_rx(vhba, fp);
-		return;
-	}
-
-	if ((fh->fh_r_ctl == FC_RCTL_DD_SOL_DATA) ||
-		(fh->fh_r_ctl == FC_RCTL_DD_CMD_STATUS)) {
-		shost_printk(KERN_WARNING, vhba->lp->host,
-			"RFCI RX: RCTL=DD_SOL_DATA/DD_CMD_STATUS (%x), ox_id %hx, dropping.\n",
-			fh->fh_r_ctl, ntohs(fh->fh_ox_id));
+       case FC_RCTL_DD_CMD_STATUS:
+       case FC_RCTL_DD_DATA_DESC:
+       case FC_RCTL_DD_SOL_DATA:
+               pr_err("%s: DD_CMD_STATUS/DD_DATA_DESC (initiator). Dropping for now\n", __func__);
 		goto free_packet;
+
+       default:
+               pr_debug("%s: Unhandling fh_r_ctl (%x). Giving to libfc\n", __func__);
+               break;
 	}
 
 	fc_exch_recv(lp, fp);
@@ -930,7 +937,6 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 			vhba->flogi_oxid = ntohs(fh->fh_ox_id);
 			vhba->rfci_rx_enabled = 1;
 			if (!fip_ctlrs[vhba->net_type - 1].els_send(vhba, skb)) {
-				fctgt_info("TX: FLOGI REQ\n");
 				shost_printk(KERN_INFO, vhba->lp->host,
 						"Send flogi over fip\n");
 				goto out;
