@@ -43,6 +43,8 @@
 
 #include <scsi/libfc.h>
 #include <scsi/fc_encode.h>
+#include <target/target_core_base.h>
+#include <target/target_core_fabric.h>
 
 #include "mfc.h"
 #include "mlx4_EN_includes.h"
@@ -750,9 +752,35 @@ static int mfc_recv_abort_reply(struct fc_frame *fp, struct mfc_vhba *vhba)
 
 static int mfc_handle_prli(struct fc_frame *fp, struct mfc_vhba *vhba)
 {
+	struct se_session *se_sess;
+	struct se_portal_group *se_tpg;
+	struct mlx4_fc_tpg *tpg;
+	struct mfc_port *mfc_port;
+	unsigned char wwpn[32];
 
-       pr_err("%s: PRLI req - need to create TCM session\n", __func__);
-       return 0;
+	se_sess = transport_init_session();
+	if (!se_sess)
+		return -ENOMEM;
+
+	memset(&wwpn, 0, 32);
+	snprintf(wwpn, 32, "21:00:%02x:%02x:%02x:%02x:%02x:%02x",
+		 vhba->fc_mac[0], vhba->fc_mac[1], vhba->fc_mac[2],
+		 vhba->fc_mac[3], vhba->fc_mac[4], vhba->fc_mac[5]);
+
+	mfc_port = vhba->mfc_port;
+	se_tpg = &mfc_port->mlx4_fc_port.mfc_tpg_1.se_tpg;
+
+	se_sess->se_node_acl = core_tpg_check_initiator_node_acl(se_tpg, wwpn);
+	if (!se_sess->se_node_acl) {
+		transport_free_session(se_sess);
+		return -EINVAL;
+	}
+
+	vhba->vha_sess = se_sess;
+	__transport_register_session(se_tpg, se_sess->se_node_acl,
+				     se_sess, vhba);
+
+	return 0;
 }
 
 static void mfc_rx_rfci(struct work_struct *work)
@@ -859,7 +887,7 @@ static void mfc_rx_rfci(struct work_struct *work)
 		goto free_packet;
 
        default:
-               pr_debug("%s: Unhandling fh_r_ctl (%x). Giving to libfc\n", __func__);
+               pr_debug("%s: Unhandling fh_r_ctl. Giving to libfc\n", __func__);
                break;
 	}
 

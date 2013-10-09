@@ -21,7 +21,6 @@
 #include "mfc.h"
 #include "fip_ctlr_api.h"
 #endif
-#include "mlx4_fc_base.h"
 #include "mlx4_fc_fabric.h"
 
 /* Local pointer to allocated TCM configfs fabric module */
@@ -281,11 +280,13 @@ static struct se_portal_group *mlx4_fc_make_tpg(
 	if (strict_strtoul(name + 5, 10, &tpgt) || tpgt > UINT_MAX)
 		return ERR_PTR(-EINVAL);
 
-	tpg = kzalloc(sizeof(struct mlx4_fc_tpg), GFP_KERNEL);
-	if (!tpg) {
-		printk(KERN_ERR "Unable to allocate struct mlx4_fc_tpg");
-		return ERR_PTR(-ENOMEM);
+	if (tpgt != 1) {
+		pr_err("A single TPGT=1 is used for HW port mappings\n");
+		return ERR_PTR(-ENOSYS);
 	}
+	tpg = &port->mfc_tpg_1;
+	memset(&tpg, 0, sizeof(struct mlx4_fc_tpg));
+
 	tpg->port = port;
 	tpg->port_tpgt = tpgt;
 	tpg->mfc_port = mfc_port;
@@ -293,10 +294,9 @@ static struct se_portal_group *mlx4_fc_make_tpg(
 	ret = core_tpg_register(&mlx4_fc_fabric_configfs->tf_ops, wwn,
 				&tpg->se_tpg, (void *)tpg,
 				TRANSPORT_TPG_TYPE_NORMAL);
-	if (ret < 0) {
-		kfree(tpg);
+	if (ret < 0)
 		return NULL;
-	}
+
 	return &tpg->se_tpg;
 }
 
@@ -306,7 +306,6 @@ static void mlx4_fc_drop_tpg(struct se_portal_group *se_tpg)
 				struct mlx4_fc_tpg, se_tpg);
 
 	core_tpg_deregister(se_tpg);
-	kfree(tpg);
 }
 
 static struct se_wwn *mlx4_fc_make_wwpn(
@@ -322,11 +321,6 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 	/* if (mlx4_fc_parse_wwn(name, &wwpn, 1) < 0)
 		return ERR_PTR(-EINVAL); */
 
-	port = kzalloc(sizeof(struct mlx4_fc_port), GFP_KERNEL);
-	if (!port) {
-		printk(KERN_ERR "Unable to allocate struct mlx4_fc_wwpn");
-		return ERR_PTR(-ENOMEM);
-	}
 	/* mlx4_fc_format_wwn(&port->port_name[0], MLX4_FC_NAMELEN, wwpn); */
 
 	mfc_port = mlx4_fc_get_port_by_wwpn(name);
@@ -334,6 +328,7 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 		kfree(port);
 		return ERR_PTR(-EINVAL);
 	}
+	port = &mfc_port->mlx4_fc_port;
 	port->mfc_port = mfc_port;
 	mfc_dev = mfc_port->mfc_dev;
 	wwn = mfc_dev->dev->caps.def_mac[mfc_port->port];

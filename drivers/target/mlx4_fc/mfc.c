@@ -39,6 +39,7 @@
 #include <linux/rtnetlink.h>
 
 #include <scsi/fc/fc_fip.h>
+#include <target/target_core_base.h>
 
 #include "mfc.h"
 #include "mlx4_EN_includes.h"

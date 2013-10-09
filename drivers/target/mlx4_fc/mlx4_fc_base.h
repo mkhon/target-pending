@@ -32,6 +32,8 @@ struct mlx4_fc_port {
 	char port_name[MLX4_FC_NAMELEN];
 	/* Pointer to mfc_port created by mlx4 interface ->add_dev */
 	struct mfc_port *mfc_port;
+	/* mlx4_fc_tpg #1 for non NPIV WWN */
+	struct mlx4_fc_tpg mfc_tpg_1;
 	/* Returned by mlx4_fc_make_port() */
 	struct se_wwn port_wwn;
 };

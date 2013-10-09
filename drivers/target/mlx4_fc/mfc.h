@@ -59,6 +59,9 @@
 #include <scsi/fc/fc_fcp.h>
 #include <scsi/fc/fc_fcoe.h>
 
+#include <target/target_core_base.h>
+#include "mlx4_fc_base.h"
+
 #define MFC_CMD_TIMEOUT			(5 * HZ)
 #define MFC_MAX_LUN			255
 #define MFC_MAX_FCP_TARGET		256
@@ -398,6 +401,7 @@ struct mfc_vhba {
 	struct fc_lport *lp;
 	struct mfc_port *mfc_port;
 	struct fcoe_ctlr *vhba_ctlr;
+	struct se_session *vhba_sess;
 	int idx;
 	int fc_mac_idx;
 	u8 fc_mac[ETH_ALEN];
@@ -475,6 +479,7 @@ struct mfc_port {
 
 	/* sysfs */
 	struct kobject kobj;
+	struct mlx4_fc_port mlx4_fc_port;
 };
 
 /* represents a single HCA */
