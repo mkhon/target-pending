@@ -942,6 +942,19 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 						"Send logo over fip\n");
 				goto out;
 			}
+               } else if (fc_frame_payload_op(fp) == ELS_PRLI) {
+                       struct {
+                               struct fc_els_prli prli;
+                               struct fc_els_spp spp;
+                       } *pp;
+                       struct fc_els_spp *spp;
+                       u32 fcp_parm;
+
+                       pp = fc_frame_payload_get(fp, sizeof(*pp));
+                       spp = &pp->spp;
+                       fcp_parm = ntohl(spp->spp_params);
+                       fcp_parm &= ~FCP_SPPF_RETRY;
+                       spp->spp_params = htonl(fcp_parm | FCP_SPPF_TARG_FCN);
 		}
 	}
 
@@ -983,37 +996,28 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 		skb->protocol = htons(ETH_P_FCOE);
 		eh->h_proto = htons(ETH_P_FCOE);
 
-		mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
-
 		memcpy(eh->h_dest, vhba->dest_addr, ETH_ALEN);
 		memcpy(eh->h_source, vhba->fc_mac, ETH_ALEN);
-		printk("mfc_send_frame: eh->h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
+               printk("mfc_frame_send: eh->h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
 			eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
 			eh->h_dest[4], eh->h_dest[5]);
-               printk("mfc_send_frame: eh->h_source: 0x%02x %02x %02x %02x %02x %02x\n",
+               printk("mfc_frame_send: eh->h_source: 0x%02x %02x %02x %02x %02x %02x\n",
 			eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3],
 			eh->h_source[4], eh->h_source[5]);
 
-		printk("mfc_send_frame: #2 fh->fh_d_id: 0x%02x %02x %02x\n",
+               printk("mfc_frame_send: #2 fh->fh_d_id: 0x%02x %02x %02x\n",
 			fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
-#if 0
-		fh->fh_d_id[0] = eh->h_dest[3];
-		fh->fh_d_id[1] = eh->h_dest[4];
-		fh->fh_d_id[2] = eh->h_dest[5];
-#else
-		if (memcpy(eh->h_dest, fh->fh_d_id, 3)) {
+
+#if 1
+               if (memcmp(&eh->h_dest[3], fh->fh_d_id, 3)) {
 			printk("Fixing up eh->h_dest different from fh_d_id\n");
-                       eh->h_dest[0] = 0x0e;
-                       eh->h_dest[1] = 0xfd;
-                       eh->h_dest[2] = 0;
 			eh->h_dest[3] = fh->fh_d_id[0];
 			eh->h_dest[4] = fh->fh_d_id[1];
 			eh->h_dest[5] = fh->fh_d_id[2];
+                       memcpy(&ofc_ctlr->dest_addr[3], fh->fh_d_id, 3);
+                       mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
 		}
 #endif
-		printk("mfc_send_frame: #3 fh->fh_d_id: 0x%02x %02x %02x\n",
-			fh->fh_d_id[0], fh->fh_d_id[1], fh->fh_d_id[2]);
-
 	} else if (vhba->net_type == NET_IB) {
 		skb->protocol = htons(FCOIB_SIG);
 		eh->h_proto = htons(FCOIB_SIG);
