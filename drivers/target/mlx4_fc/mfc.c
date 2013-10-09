@@ -533,7 +533,7 @@ int mfc_fip_tx(struct mfc_port *mfc_port, struct sk_buff *skb, int vlan_id, int 
 	__be32 op_own;
 	unsigned long flags;
 
-	printk("Entering mfc_fip_tx >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+       printk("Entering mfc_fip_tx vlan_id %d prio %d\n", vlan_id, vlan_prio);
 
 	spin_lock_irqsave(&sq->lock, flags);
 	if (unlikely((u32) (sq->prod - sq->cons - 1) > sq->size - 2)) {
@@ -833,15 +833,21 @@ int mfc_init_fip(struct mfc_port *fc_port)
 		}
 		printk("After mlx4_qp_attach_common for FIP_ALL_P2P_MACS\n");
 #endif
+               memset(&fc_port->fip_qp.steer_ethertype_gid[0], 0, 16);
 		memcpy(&fc_port->fip_qp.steer_ethertype_gid[10],
 				fc_port->def_mac, ETH_ALEN);
-		fc_port->fip_qp.steer_ethertype_gid[4] = 0; // vep_num
 		fc_port->fip_qp.steer_ethertype_gid[5] = fc_port->port;
+               fc_port->fip_qp.steer_ethertype_gid[4] = 0; // vep_num
+#if 1
+               fc_port->fip_qp.steer_ethertype_gid[7] =
+                       MLX4_UC_STEER << 1;
+#else
 		fc_port->fip_qp.steer_ethertype_gid[7] =
 			MLX4_UC_STEER << 1 |
 			1 << 3;			/* check ethertype */;
 		fc_port->fip_qp.steer_ethertype_gid[2] = 0x89;
 		fc_port->fip_qp.steer_ethertype_gid[3] = 0x14;
+#endif
 		err = mlx4_qp_attach_common(mfc_dev->dev, &qp->mqp,
 				fc_port->fip_qp.steer_ethertype_gid, 0,
 				MLX4_PROT_ETH , MLX4_UC_STEER);
@@ -855,6 +861,7 @@ int mfc_init_fip(struct mfc_port *fc_port)
 			goto err_detach_all_p2p;
 #endif
 		}
+               printk("After mlx4_qp_attach_common for physical_mac\n");
 	}
 	fc_port->fip_qp.fc_qp.is_flushing = 0;
 
@@ -1049,26 +1056,42 @@ int mfc_flogi_finished(struct mfc_vhba *vhba, u8 *my_npid)
 
 	printk("Logged in to FABRIC. fid: %02x:%02x:%02x vhba=%d port=%d\n",
 		     my_npid[0], my_npid[1], my_npid[2],
-		     vhba->idx, vhba->mfc_port->port);
+                    vhba->idx, fc_port->port);
 
 	vhba->my_npid.reserved = 0;
 	memcpy(vhba->my_npid.fid, my_npid, 3);
 
 	/* init RFCI */
 	if (!vhba->flogi_finished) {
+               err = mfc_create_rfci(vhba);
+               if (err) {
+                       shost_printk(KERN_ERR, vhba->lp->host,
+                                    "Create rfci vhba=%d port=%d err=%d\n",
+                                    vhba->idx, fc_port->port, err);
+                       goto out;
+               }
+
+               err = mfc_create_fexchs(vhba);
+               if (err) {
+                       shost_printk(KERN_ERR, lp->host,
+                                    "Fail to create FCMD vhba=%d port=%d err=%d\n",
+                                    vhba->idx, fc_port->port, err);
+                       goto err_destroy_rfci;
+               }
+
 		err = mfc_init_rfci(vhba);
 		if (err) {
 			shost_printk(KERN_ERR, vhba->lp->host,
 				     "Init rfci vhba=%d port=%d err=%d\n",
 				     vhba->idx, vhba->mfc_port->port, err);
-			goto out;
+                       goto err_destroy_fcmd;
 		}
 		printk("Completed mfc_init_rfci >>>>>>>>>>>>>>>>>>>..\n");
 	}
 
 	if ((vhba->idx < 0) || (vhba->idx >= MFC_NUM_NPORT_IDS)) {
 		err = -EINVAL;
-		goto err;
+               goto err_destroy_fcmd;
 	}
 
 	memcpy(&fc_port->npid_table[vhba->idx], &vhba->my_npid,
@@ -1082,7 +1105,7 @@ int mfc_flogi_finished(struct mfc_vhba *vhba, u8 *my_npid)
 			     vhba->my_npid.fid[0], vhba->my_npid.fid[1],
 			     vhba->my_npid.fid[2], vhba->idx, fc_port->port);
 
-		goto err;
+               goto err_destroy_fcmd;
 	}
 
 	if (!vhba->flogi_finished) {
@@ -1091,7 +1114,7 @@ int mfc_flogi_finished(struct mfc_vhba *vhba, u8 *my_npid)
 			shost_printk(KERN_ERR, lp->host,
 				     "Couldn't init FCMD vhba=%d port=%d err=%d\n",
 				     vhba->idx, fc_port->port, err);
-			goto err;
+                       goto err_destroy_fcmd;
 		}
 		printk("Completed mfc_init_fexchs >>>>>>>>>>>>>>>>>>>>>>>>>>..\n");
 	}
@@ -1099,6 +1122,10 @@ int mfc_flogi_finished(struct mfc_vhba *vhba, u8 *my_npid)
 	vhba->flogi_finished++;
 	return 0;
 
+err_destroy_fcmd:
+       mfc_destroy_fexchs(vhba);
+err_destroy_rfci:
+       mfc_destroy_rfci(vhba);
 err:
 	mfc_deinit_rfci(vhba);
 out:
@@ -1459,7 +1486,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 	case NET_IB:
 		break;
 	}
-
+#if 0
 	err = mfc_create_rfci(vhba);
 	if (err) {
 		shost_printk(KERN_ERR, vhba->lp->host,
@@ -1475,7 +1502,7 @@ static struct mfc_vhba *mfc_create_vhba(struct mfc_port *fc_port, unsigned int m
 			     idx, port, err);
 		goto err_destroy_rfci;
 	}
-#if 0
+
 	err = mfc_libfc_init(lp, vhba->base_reserved_xid,
 			100, //FC_XID_MAX, //vhba->base_reserved_xid + vhba->num_reserved_xid - 1,
 			     wwpn, wwnn);
@@ -1505,11 +1532,11 @@ err_destroy_libfc:
 	fc_remove_host(lp->host);
 //	scsi_remove_host(lp->host);
 	fc_lport_destroy(lp);
-#endif
 err_destroy_fcmd:
 	mfc_destroy_fexchs(vhba);
 err_destroy_rfci:
 	mfc_destroy_rfci(vhba);
+#endif
 err_free_fexch_bulk:
 	mfc_bitmap_slot_free(&fc_port->fexch_bulk_bm, idx);
 err_lport_destroy:
@@ -1701,7 +1728,10 @@ int mfc_init_port(struct mfc_dev *mfc_dev, int port)
 		goto err_free_qp_range;
 	}
 
-	count = max_vhba_per_port;
+        count = (1 << mfc_dev->dev->caps.log_num_macs) *
+                (1 << mfc_dev->dev->caps.log_num_vlans) *
+                (1 << mfc_dev->dev->caps.log_num_prios);
+
 	err = mlx4_qp_reserve_range(mfc_dev->dev, count, count,
 				    &mfc_port->base_rfci_qpn);
 	if (err) {
@@ -1717,6 +1747,9 @@ int mfc_init_port(struct mfc_dev *mfc_dev, int port)
 	params.rfci_base = mfc_port->base_rfci_qpn;
 	params.fexch_base = mfc_port->base_fexch_qpn;
 	params.fexch_base_mpt = mfc_port->base_fexch_mpt;
+        params.nm = mfc_dev->dev->caps.log_num_macs;
+        params.nv = mfc_dev->dev->caps.log_num_vlans;
+        params.np = mfc_dev->dev->caps.log_num_prios;
 	params.log_num_rfci = ilog2(count);
 	params.def_fcoe_promisc_qpn = 0x77;
 	params.def_fcoe_mcast_qpn = 0x78;

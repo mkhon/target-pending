@@ -258,7 +258,7 @@ static void mfc_rfci_err_comp(void *arg, struct mlx4_cqe *cqe)
 	mfc_rfci_rx_comp(arg, cqe);
 }
 
-static u64 mac_to_u64(u8 *mac)
+u64 mac_to_u64(u8 *mac)
 {
 	int i;
 	u64 ret = 0;
@@ -282,13 +282,34 @@ int mfc_create_rfci(struct mfc_vhba *vhba)
 	int err = 0;
 	int i;
 
+       vhba->fc_mac_idx = mlx4_register_mac(mfc_dev->dev, fc_port->port,
+                                            mac_to_u64(vhba->fc_mac));
+       if (vhba->fc_mac_idx < 0) {
+               shost_printk(KERN_ERR, vhba->lp->host,
+                               "Couldn't register mac=%llx idx=%d vhba=%d port=%d\n",
+                               mac_to_u64(vhba->fc_mac), vhba->fc_mac_idx, vhba->idx, fc_port->port);
+               err = -EINVAL;
+               goto err;
+       }
+
+       if (vhba->fc_vlan_id != -1) {
+               err = mlx4_register_vlan(mfc_dev->dev, fc_port->port,
+                               vhba->fc_vlan_id, &vhba->fc_vlan_idx);
+               if (err) {
+                       shost_printk(KERN_ERR, vhba->lp->host,
+                                       "Fail to reg vlan=%d vhba=%d port=%d err=%d\n",
+                                       vhba->fc_vlan_id, vhba->idx, fc_port->port, err);
+                       goto err_unreg_mac;
+               }
+       }
+
 	err = mfc_q_init(sq, RFCI_SQ_BB_SIZE, mfc_num_reserved_xids,
 			 sizeof(struct sk_buff *));
 	if (err) {
 		shost_printk(KERN_ERR, vhba->lp->host,
 			     "Init rfci sq vhba=%d port=%d err=%d\n",
 			     vhba->idx, fc_port->port, err);
-		goto err;
+               goto err_unreg_vlan;
 	}
 
 	err = mfc_q_init(rq, RFCI_RQ_WQE_SIZE, mfc_num_reserved_xids,
@@ -321,7 +342,12 @@ int mfc_create_rfci(struct mfc_vhba *vhba)
 	mfc_stamp_q(sq);
 	mfc_stamp_q(rq);
 
-	qpn = fc_port->base_rfci_qpn + vhba->idx;
+        qpn = fc_port->base_rfci_qpn |
+                (vhba->fc_mac_idx <<
+                 (mfc_dev->dev->caps.log_num_vlans + mfc_dev->dev->caps.log_num_prios));
+
+        if (vhba->fc_vlan_id != -1 && mfc_dev->dev->caps.log_num_prios)
+                qpn |= (vhba->fc_vlan_id << mfc_dev->dev->caps.log_num_prios);
 
 	err = mlx4_qp_alloc(mfc_dev->dev, qpn, &rfci->fc_qp.mqp);
 	if (err) {
@@ -330,6 +356,10 @@ int mfc_create_rfci(struct mfc_vhba *vhba)
 			     qpn, vhba->idx, fc_port->port, err);
 		goto err_free_man;
 	}
+
+       shost_printk(KERN_ERR, vhba->lp->host,
+                    "Alloc rfci qp=%x vhba=%d port=%d\n",
+                    qpn, vhba->idx, fc_port->port);
 
 	qp->doorbell_qpn = swab32(qp->mqp.qpn << 8);
 
@@ -371,6 +401,14 @@ err_free_rxinfo:
 	mfc_q_destroy(rq);
 err_free_txinfo:
 	mfc_q_destroy(sq);
+err_unreg_vlan:
+       if (vhba->net_type == NET_ETH)
+               if (vhba->fc_vlan_id != -1)
+                       mlx4_unregister_vlan(mfc_dev->dev, fc_port->port, vhba->fc_vlan_idx);
+err_unreg_mac:
+       if (vhba->net_type == NET_ETH)
+               mlx4_unregister_mac(mfc_dev->dev, fc_port->port,
+                                   mac_to_u64(vhba->fc_mac));
 err:
 	return err;
 }
@@ -435,8 +473,7 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 		.flags = cpu_to_be32(QPC_SERVICE_TYPE_RFCI << 16),
 		.pd = cpu_to_be32(mfc_dev->priv_pdn),
 		/* Raw-ETH requirement */
-//		.mtu_msgmax = 0x77,
-		.mtu_msgmax = 0xff,
+               .mtu_msgmax = 0x77,
 		.sq_size_stride = ilog2(mfc_num_reserved_xids) << 3 |
 				  ilog2(RFCI_SQ_BB_SIZE >> 4),
 		.rq_size_stride = ilog2(mfc_num_reserved_xids) << 3 |
@@ -465,46 +502,15 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 
 	if (qp_state != MLX4_QP_STATE_RTS) {
 		shost_printk(KERN_ERR, vhba->lp->host,
-			     "Error move rfci qp to RTS vhba=%d port=%d\n",
-			     vhba->idx, fc_port->port);
+                            "Error move rfci qp 0x%x to RTS state %d vhba=%d port=%d\n",
+                            qp->mqp.qpn, qp_state, vhba->idx, fc_port->port);
 		return err;
 	}
 
 	if (vhba->net_type == NET_ETH) {
-#if 1
-		err = mlx4_register_mac(mfc_dev->dev, fc_port->port,
-				mac_to_u64(vhba->fc_mac));
-		if (err) {
-			shost_printk(KERN_ERR, vhba->lp->host,
-					"Couldn't register mac=%llx idx=%d vhba=%d port=%d\n",
-					mac_to_u64(vhba->fc_mac), vhba->fc_mac_idx, vhba->idx, fc_port->port);
-			return err;
-		}
-		if (vhba->fc_vlan_id != -1) {
-			err = mlx4_register_vlan(mfc_dev->dev, fc_port->port,
-					vhba->fc_vlan_id, &vhba->fc_vlan_idx);
-			if (err) {
-				shost_printk(KERN_ERR, vhba->lp->host,
-						"Fail to reg vlan=%d vhba=%d port=%d err=%d\n",
-						vhba->fc_vlan_id, vhba->idx, fc_port->port, err);
-				goto err_unreg_mac;
-			}
-		}
-#endif
+               memset(&vhba->steer_gid[0], 0, 16);
 		memcpy(&vhba->steer_gid[10], vhba->fc_mac, ETH_ALEN);
-		vhba->steer_gid[4] = 0; /* vep_num */
 		vhba->steer_gid[5] = fc_port->port;
-#if 0
-		vhba->steer_gid[7] = MLX4_UC_STEER << 1 |
-			1 << 0 |	/* vlan present */
-			1 << 2;		/* check vlan */
-		*(u16 *)(&vhba->steer_gid[8]) = cpu_to_be16(vhba->fc_vlan_id & 0x0fff);
-#else
-		vhba->steer_gid[7] = MLX4_UC_STEER << 1 |
-			1 << 3;                 /* check ethertype */
-		vhba->steer_gid[2] = 0x89;
-		vhba->steer_gid[3] = 0x06;
-#endif
 		err = mlx4_qp_attach_common(mfc_dev->dev, &rfci->fc_qp.mqp,
 				vhba->steer_gid, 0, MLX4_PROT_FCOE,
 				MLX4_UC_STEER);
@@ -512,26 +518,17 @@ int mfc_init_rfci(struct mfc_vhba *vhba)
 			shost_printk(KERN_ERR, vhba->lp->host,
 					"Couldn't register mac vhba=%d port=%d\n",
 					vhba->idx, fc_port->port);
-			goto err_unreg_vlan;
+                       return err;
 		}
-		printk("Successfully setup rfci->fc_qp >>>>>>>>>>>>>>>>>>>\n");
+               printk("Setup rfci->fc_qp 0x%x mac=%llx vlan %d on port %d\n",
+                       rfci->fc_qp.mqp.qpn, mac_to_u64(vhba->fc_mac),
+                       vhba->fc_vlan_id, fc_port->port);
 	}
 	printk("Done with mfc_init_rfci\n");
 	rfci->fc_qp.is_flushing = 0;
 	rfci->initialized = 1;
 
 	return 0;
-
-err_unreg_vlan:
-	if (vhba->net_type == NET_ETH)
-		if (vhba->fc_vlan_id != -1)
-			mlx4_unregister_vlan(mfc_dev->dev, fc_port->port, vhba->fc_vlan_idx);
-err_unreg_mac:
-	if (vhba->net_type == NET_ETH)
-		mlx4_unregister_mac(mfc_dev->dev, fc_port->port,
-				    mac_to_u64(vhba->fc_mac));
-
-	return err;
 }
 
 int mfc_deinit_rfci(struct mfc_vhba *vhba)
@@ -579,6 +576,9 @@ int mlx4_do_rfci_xmit(struct mfc_vhba *vhba, struct sk_buff *skb, u8 fceof)
 	struct mfcoib_rfci_tx_desc *tx_desc_ib;
 	struct mfcoe_rfci_tx_desc *tx_desc_eth;
 	u_int tlen = 0;
+
+       if (!rfci->initialized)
+               return -EINVAL;
 
 	spin_lock_irqsave(&sq->lock, flags);
 	if (unlikely((u32) (sq->prod - sq->cons - 1) > sq->size - 1)) {
@@ -990,7 +990,7 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 		printk("mfc_send_frame: eh->h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
 			eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
 			eh->h_dest[4], eh->h_dest[5]);
-		 printk("mfc_send_frame: eh->h_source: 0x%02x %02x %02x %02x %02x %02x\n",
+               printk("mfc_send_frame: eh->h_source: 0x%02x %02x %02x %02x %02x %02x\n",
 			eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3],
 			eh->h_source[4], eh->h_source[5]);
 
@@ -1003,7 +1003,9 @@ int mfc_frame_send(struct fc_lport *lp, struct fc_frame *fp)
 #else
 		if (memcpy(eh->h_dest, fh->fh_d_id, 3)) {
 			printk("Fixing up eh->h_dest different from fh_d_id\n");
-			dump_stack();
+                       eh->h_dest[0] = 0x0e;
+                       eh->h_dest[1] = 0xfd;
+                       eh->h_dest[2] = 0;
 			eh->h_dest[3] = fh->fh_d_id[0];
 			eh->h_dest[4] = fh->fh_d_id[1];
 			eh->h_dest[5] = fh->fh_d_id[2];

@@ -178,7 +178,7 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 	}
 
 	printk("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
-	printk("msg->fh.fip_op: 0x%04x msg->fh.fip_subcode: 0x%04x\n",
+       printk("fip_rx: msg->fh.fip_op: 0x%04x msg->fh.fip_subcode: 0x%04x\n",
 		msg->fh.fip_op, msg->fh.fip_subcode);
 	printk("fip_rx: msg->eh.h_dest: 0x%02x %02x %02x %02x %02x %02x\n",
 		msg->eh.h_dest[0], msg->eh.h_dest[1], msg->eh.h_dest[2],
@@ -208,10 +208,13 @@ static void fip_rx(struct mfc_port *mfc_port, int vlan_id, struct sk_buff *skb)
 	ofc_ctlr->dest_addr[0] = 0x00;
 	ofc_ctlr->dest_addr[1] = 0x02;
 	ofc_ctlr->dest_addr[2] = 0xc9;
-	ofc_ctlr->dest_addr[3] = 0x08;
-	ofc_ctlr->dest_addr[4] = 0xad;
-	ofc_ctlr->dest_addr[5] = 0x86;
+       ofc_ctlr->dest_addr[3] = 0x0d;
+       ofc_ctlr->dest_addr[4] = 0x3c;
+       ofc_ctlr->dest_addr[5] = 0x4a;
 	printk("Set hardcoded ofc_ctlr->dest_addr >>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+       printk("ofc_ctlr->dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
+               ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
+               ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
 #endif
 
 	if ((msg->fh.fip_op == htons(FIP_OP_VLAN)) &&
@@ -290,8 +293,8 @@ static void flogi_resp(struct fc_seq *seq, struct fc_frame *fp, void *arg)
 	new_mac[1] = 0xfd;
 	new_mac[2] = 0x00;
 	new_mac[3] = 0x00;
-	new_mac[4] = 0xe3;
-	new_mac[5] = 0x1e;
+       new_mac[4] = 0x91;
+       new_mac[5] = 0xdc;
 	printk("flogi_resp: Calling mfc_update_src_mac with hardcoded FCoE MAC>>>>>>>>>>>>>>>>\n");
 	mfc_update_src_mac(vhba, &new_mac[0]);
 #endif
@@ -319,7 +322,7 @@ done:
 #if 0
 	fctgt_notify_flogi_acc(vhba, seq, fp);
 #else
-	dump_stack();
+       return;
 #endif
 
 }
@@ -355,10 +358,10 @@ static struct fc_seq *elsct_send(struct fc_lport *lport, u32 did,
 
 	switch (op) {
 	case ELS_FLOGI:
-#if 0
-		printk("Calling mfc_update_gw_addr_eth for ofc_ctlr->dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
+               printk("fcoe_main: ofc_ctlr->dest_addr: 0x%02x %02x %02x %02x %02x %02x\n",
 			ofc_ctlr->dest_addr[0], ofc_ctlr->dest_addr[1], ofc_ctlr->dest_addr[2],
 			ofc_ctlr->dest_addr[3], ofc_ctlr->dest_addr[4], ofc_ctlr->dest_addr[5]);
+#if 0
 		mfc_update_gw_addr_eth(vhba, ofc_ctlr->dest_addr, 3);
 #endif
 	case ELS_FDISC:
@@ -415,6 +418,7 @@ static struct fcoe_ctlr *create_fcoe_ctlr(struct mfc_port *mfc_port)
 #endif
 	fcf->fcoe_fip = fip;
 	fip->selected_fcf.fcf = fcf;
+
 #if 0
 	fcoe_ctlr_init(&fcf->ofc_ctlr, FIP_MODE_AUTO);
 #else

@@ -468,6 +468,7 @@ struct mfc_port {
 	u8 wwpn[32];
 	struct mfc_fip fip_qp;
 	int link_up;
+       int fip_mac_idx;
 	enum fip_state fip_mode;
 	struct fc_lport *lport;
 	struct delayed_work link_work;
@@ -829,4 +830,5 @@ int fctgt_map_fmr(struct mfc_vhba *vhba, struct mem_buf *mem_buf,
 		enum dma_data_direction dir);
 int fctgt_unmap_fmr(struct mfc_vhba *vhba, struct mem_buf *mem_buf);
 
+u64 mac_to_u64(u8 *mac);
 #endif /* MFC_H */
