@@ -16,7 +16,7 @@
 #include <target/target_core_fabric.h>
 #include <target/target_core_configfs.h>
 
-#include "mlx4_fc_base.h"
+#include "mfc.h"
 #include "mlx4_fc_fabric.h"
 
 int mlx4_fc_check_true(struct se_portal_group *se_tpg)
@@ -187,6 +187,16 @@ u32 mlx4_fc_sess_get_index(struct se_session *se_sess)
 
 int mlx4_fc_write_pending(struct se_cmd *se_cmd)
 {
+	struct mfc_cmd *mfc_cmd = container_of(se_cmd, struct mfc_cmd, se_cmd);
+	struct trans_start *ts = &mfc_cmd->ts;
+	struct mfc_vhba *vhba = se_cmd->se_sess->fabric_sess_ptr;
+	int rc;
+
+#warning FIXME: Fill in rest of *ts for RDMA_READ
+	rc = mfc_send_data(vhba, ts);
+	if (rc)
+		return rc;
+
 	return 0;
 }
 
@@ -212,11 +222,36 @@ int mlx4_fc_get_cmd_state(struct se_cmd *se_cmd)
 
 int mlx4_fc_queue_data_in(struct se_cmd *se_cmd)
 {
+	struct mfc_cmd *mfc_cmd = container_of(se_cmd, struct mfc_cmd, se_cmd);
+	struct trans_start *ts = &mfc_cmd->ts;
+	struct mfc_vhba *vhba = se_cmd->se_sess->fabric_sess_ptr;
+	int rc;
+
+#warning FIXME: Fill in rest of *ts for RDMA_WRITE
+	rc = mfc_send_data(vhba, ts);
+	if (rc)
+		return rc;
+
+#warning FIXME: Fill in rest of *ts for SCSI response
+	rc = mfc_send_resp(vhba, ts);
+	if (rc)
+		return rc;
+
 	return 0;
 }
 
 int mlx4_fc_queue_status(struct se_cmd *se_cmd)
 {
+	struct mfc_cmd *mfc_cmd = container_of(se_cmd, struct mfc_cmd, se_cmd);
+	struct trans_start *ts = &mfc_cmd->ts;
+	struct mfc_vhba *vhba = se_cmd->se_sess->fabric_sess_ptr;
+	int rc;
+
+#warning FIXME: Fill in rest of *ts for SCSI response
+	rc = mfc_send_resp(vhba, ts);
+	if (rc)
+		return rc;
+
 	return 0;
 }
 
