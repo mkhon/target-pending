@@ -327,6 +327,82 @@ static ssize_t mlx4_fc_tpg_attrib_store_cache_dynamic_acls(
 }
 TPG_ATTR(cache_dynamic_acls, S_IRUGO | S_IWUSR);
 
+static ssize_t mlx4_fc_tpg_attrib_show_demo_mode_write_protect(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+
+	return snprintf(page, PAGE_SIZE, "%u\n", attrib->demo_mode_write_protect);
+}
+
+static ssize_t mlx4_fc_tpg_attrib_store_demo_mode_write_protect(
+	struct se_portal_group *se_tpg,
+	const char *page,
+	size_t count)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			 struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+	u32 val;
+	int ret;
+
+	ret = kstrtou32(page, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val != 1 && val != 0) {
+		pr_err("Illegal value for demo_mode_write_protect: %u\n", val);
+		return -EINVAL;
+	}
+
+	pr_debug("MLX4_FC: Setting demo_mode_write_protect: %u\n", val);
+	attrib->demo_mode_write_protect = val;
+
+	return count;
+}
+TPG_ATTR(demo_mode_write_protect, S_IRUGO | S_IWUSR);
+
+static ssize_t mlx4_fc_tpg_attrib_show_prod_mode_write_protect(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+
+	return snprintf(page, PAGE_SIZE, "%u\n", attrib->prod_mode_write_protect);
+}
+
+static ssize_t mlx4_fc_tpg_attrib_store_prod_mode_write_protect(
+	struct se_portal_group *se_tpg,
+	const char *page,
+	size_t count)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+	u32 val;
+	int ret;
+
+	ret = kstrtou32(page, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val != 1 && val != 0) {
+		pr_err("Illegal value for prod_mode_write_protect: %u\n", val);
+		return -EINVAL;
+	}
+
+	pr_debug("MLX4_FC: Setting prod_mode_write_protect: %u\n", val);
+	attrib->prod_mode_write_protect = val;
+
+	return count;
+}
+TPG_ATTR(prod_mode_write_protect, S_IRUGO | S_IWUSR);
+
 static struct configfs_attribute *mlx4_fc_tpg_attrib_attrs[] = {
 	&mlx4_fc_tpg_attrib_port.attr,
 	&mlx4_fc_tpg_attrib_net_type.attr,
@@ -341,6 +417,8 @@ static struct configfs_attribute *mlx4_fc_tpg_attrib_attrs[] = {
 	&mlx4_fc_tpg_attrib_vn2vn.attr,
 	&mlx4_fc_tpg_attrib_generate_node_acls.attr,
 	&mlx4_fc_tpg_attrib_cache_dynamic_acls.attr,
+	&mlx4_fc_tpg_attrib_demo_mode_write_protect.attr,
+	&mlx4_fc_tpg_attrib_prod_mode_write_protect.attr,
 	NULL,
 };
 
@@ -371,6 +449,8 @@ static struct se_portal_group *mlx4_fc_make_tpg(
 	tpg->port = port;
 	tpg->port_tpgt = tpgt;
 	tpg->mfc_port = mfc_port;
+
+	tpg->tpg_attrib.demo_mode_write_protect = 1;
 
 	ret = core_tpg_register(&mlx4_fc_fabric_configfs->tf_ops, wwn,
 				&tpg->se_tpg, (void *)tpg,
@@ -456,8 +536,8 @@ static struct target_core_fabric_ops mlx4_fc_ops = {
 	.tpg_parse_pr_out_transport_id	= mlx4_fc_parse_pr_out_transport_id,
 	.tpg_check_demo_mode		= mlx4_fc_check_demo_mode,
 	.tpg_check_demo_mode_cache	= mlx4_fc_check_demo_mode_cache,
-	.tpg_check_demo_mode_write_protect = mlx4_fc_check_true,
-	.tpg_check_prod_mode_write_protect = mlx4_fc_check_false,
+	.tpg_check_demo_mode_write_protect = mlx4_fc_check_demo_mode_write_protect,
+	.tpg_check_prod_mode_write_protect = mlx4_fc_check_prod_mode_write_protect,
 	.tpg_alloc_fabric_acl		= mlx4_fc_alloc_fabric_acl,
 	.tpg_release_fabric_acl		= mlx4_fc_release_fabric_acl,
 	.tpg_get_inst_index		= mlx4_fc_tpg_get_inst_index,

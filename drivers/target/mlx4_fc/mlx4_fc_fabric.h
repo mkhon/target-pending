@@ -7,6 +7,8 @@ u16 mlx4_fc_get_tag(struct se_portal_group *);
 u32 mlx4_fc_get_default_depth(struct se_portal_group *);
 int mlx4_fc_check_demo_mode(struct se_portal_group *);
 int mlx4_fc_check_demo_mode_cache(struct se_portal_group *);
+int mlx4_fc_check_demo_mode_write_protect(struct se_portal_group *);
+int mlx4_fc_check_prod_mode_write_protect(struct se_portal_group *);
 u32 mlx4_fc_get_pr_transport_id(struct se_portal_group *,
 			struct se_node_acl *, struct t10_pr_registration *,
 			int *, unsigned char *);

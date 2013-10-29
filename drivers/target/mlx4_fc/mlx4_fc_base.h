@@ -13,6 +13,8 @@ struct mlx4_fc_nacl {
 struct mlx4_fc_tpg_attrib {
 	u32 generate_node_acls;
 	u32 cache_dynamic_acls;
+	u32 demo_mode_write_protect;
+	u32 prod_mode_write_protect;
 };
 
 struct mlx4_fc_tpg {
