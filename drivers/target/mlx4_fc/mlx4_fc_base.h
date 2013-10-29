@@ -10,6 +10,11 @@ struct mlx4_fc_nacl {
 	struct se_node_acl se_node_acl;
 };
 
+struct mlx4_fc_tpg_attrib {
+	u32 generate_node_acls;
+	u32 cache_dynamic_acls;
+};
+
 struct mlx4_fc_tpg {
 	/* FC port target portal group tag for TCM */
 	u16 port_tpgt;
@@ -19,6 +24,8 @@ struct mlx4_fc_tpg {
 	struct mfc_port *mfc_port;
 	/* Returned by mlx4_fc_make_tpg() */
 	struct se_portal_group se_tpg;
+	/* Attributed used by mlx4_fc_tpg */
+	struct mlx4_fc_tpg_attrib tpg_attrib;
 };
 
 struct mlx4_fc_port {

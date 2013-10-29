@@ -72,6 +72,22 @@ u32 mlx4_fc_get_default_depth(struct se_portal_group *se_tpg)
 	return 1;
 }
 
+int mlx4_fc_check_demo_mode(struct se_portal_group *se_tpg)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+				struct mlx4_fc_tpg, se_tpg);
+
+	return tpg->tpg_attrib.generate_node_acls;
+}
+
+int mlx4_fc_check_demo_mode_cache(struct se_portal_group *se_tpg)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+				struct mlx4_fc_tpg, se_tpg);
+
+	return tpg->tpg_attrib.cache_dynamic_acls;
+}
+
 u32 mlx4_fc_get_pr_transport_id(
 	struct se_portal_group *se_tpg,
 	struct se_node_acl *se_nacl,

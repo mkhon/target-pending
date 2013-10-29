@@ -251,6 +251,82 @@ static ssize_t mlx4_fc_tpg_attrib_store_vn2vn(
 }
 TPG_ATTR(vn2vn, S_IRUGO | S_IWUSR);
 
+static ssize_t mlx4_fc_tpg_attrib_show_generate_node_acls(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+
+	return snprintf(page, PAGE_SIZE, "%u\n", attrib->generate_node_acls);
+}
+
+static ssize_t mlx4_fc_tpg_attrib_store_generate_node_acls(
+	struct se_portal_group *se_tpg,
+	const char *page,
+	size_t count)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+	u32 val;
+	int ret;
+
+	ret = kstrtou32(page, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val != 1 && val != 0) {
+		pr_err("Illegal value for generate_node_acls: %u\n", val);
+		return -EINVAL;
+	}
+
+	pr_debug("MLX4_FC: Setting generate_node_acls: %u\n", val);
+	attrib->generate_node_acls = val;
+
+	return count;
+}
+TPG_ATTR(generate_node_acls, S_IRUGO | S_IWUSR);
+
+static ssize_t mlx4_fc_tpg_attrib_show_cache_dynamic_acls(
+	struct se_portal_group *se_tpg,
+	char *page)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+
+	return snprintf(page, PAGE_SIZE, "%u\n", attrib->cache_dynamic_acls);
+}
+
+static ssize_t mlx4_fc_tpg_attrib_store_cache_dynamic_acls(
+	struct se_portal_group *se_tpg,
+	const char *page,
+	size_t count)
+{
+	struct mlx4_fc_tpg *tpg = container_of(se_tpg,
+			struct mlx4_fc_tpg, se_tpg);
+	struct mlx4_fc_tpg_attrib *attrib = &tpg->tpg_attrib;
+	u32 val;
+	int ret;
+
+	ret = kstrtou32(page, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val != 1 && val != 0) {
+		pr_err("Illegal value for generate_node_acls: %u\n", val);
+		return -EINVAL;
+	}
+
+	pr_debug("MLX4_FC: Setting cache_dynamic_acls: %u\n", val);
+	attrib->cache_dynamic_acls = val;
+
+	return count;
+}
+TPG_ATTR(cache_dynamic_acls, S_IRUGO | S_IWUSR);
+
 static struct configfs_attribute *mlx4_fc_tpg_attrib_attrs[] = {
 	&mlx4_fc_tpg_attrib_port.attr,
 	&mlx4_fc_tpg_attrib_net_type.attr,
@@ -263,6 +339,8 @@ static struct configfs_attribute *mlx4_fc_tpg_attrib_attrs[] = {
 	&mlx4_fc_tpg_attrib_initialized.attr,
 	&mlx4_fc_tpg_attrib_link_up.attr,
 	&mlx4_fc_tpg_attrib_vn2vn.attr,
+	&mlx4_fc_tpg_attrib_generate_node_acls.attr,
+	&mlx4_fc_tpg_attrib_cache_dynamic_acls.attr,
 	NULL,
 };
 
@@ -376,8 +454,8 @@ static struct target_core_fabric_ops mlx4_fc_ops = {
 	.tpg_get_pr_transport_id	= mlx4_fc_get_pr_transport_id,
 	.tpg_get_pr_transport_id_len	= mlx4_fc_get_pr_transport_id_len,
 	.tpg_parse_pr_out_transport_id	= mlx4_fc_parse_pr_out_transport_id,
-	.tpg_check_demo_mode		= mlx4_fc_check_false,
-	.tpg_check_demo_mode_cache	= mlx4_fc_check_true,
+	.tpg_check_demo_mode		= mlx4_fc_check_demo_mode,
+	.tpg_check_demo_mode_cache	= mlx4_fc_check_demo_mode_cache,
 	.tpg_check_demo_mode_write_protect = mlx4_fc_check_true,
 	.tpg_check_prod_mode_write_protect = mlx4_fc_check_false,
 	.tpg_alloc_fabric_acl		= mlx4_fc_alloc_fabric_acl,
