@@ -53,6 +53,9 @@ static struct se_node_acl *mlx4_fc_make_nodeacl(
 		mlx4_fc_release_fabric_acl(se_tpg, se_nacl_new);
 		return se_nacl;
 	}
+
+       pr_err("Add node acl %s wwpn 0x%016lx\n", name, wwpn);
+
 	/*
 	 * Locate our struct mlx4_fc_nacl and set the FC Nport WWPN
 	 */
@@ -285,7 +288,7 @@ static struct se_portal_group *mlx4_fc_make_tpg(
 		return ERR_PTR(-ENOSYS);
 	}
 	tpg = &port->mfc_tpg_1;
-	memset(&tpg, 0, sizeof(struct mlx4_fc_tpg));
+       memset(tpg, 0, sizeof(struct mlx4_fc_tpg));
 
 	tpg->port = port;
 	tpg->port_tpgt = tpgt;
@@ -324,10 +327,9 @@ static struct se_wwn *mlx4_fc_make_wwpn(
 	/* mlx4_fc_format_wwn(&port->port_name[0], MLX4_FC_NAMELEN, wwpn); */
 
 	mfc_port = mlx4_fc_get_port_by_wwpn(name);
-	if (!mfc_port) {
-		kfree(port);
+       if (!mfc_port)
 		return ERR_PTR(-EINVAL);
-	}
+
 	port = &mfc_port->mlx4_fc_port;
 	port->mfc_port = mfc_port;
 	mfc_dev = mfc_port->mfc_dev;

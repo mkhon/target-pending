@@ -776,6 +776,7 @@ static int mfc_handle_prli(struct fc_frame *fp, struct mfc_vhba *vhba)
 
 	se_sess->se_node_acl = core_tpg_check_initiator_node_acl(se_tpg, wwpn);
 	if (!se_sess->se_node_acl) {
+               pr_err("Fail node acl check for wwpn %s\n", wwpn);
 		transport_free_session(se_sess);
 		return -EINVAL;
 	}
@@ -783,6 +784,8 @@ static int mfc_handle_prli(struct fc_frame *fp, struct mfc_vhba *vhba)
 	vhba->vhba_sess = se_sess;
 	__transport_register_session(se_tpg, se_sess->se_node_acl,
 				     se_sess, vhba);
+
+       pr_debug("Allocate session %p for wwpn %s\n", se_sess, wwpn);
 
 	return 0;
 }
@@ -808,6 +811,10 @@ static void mfc_fcp_scsi_rx(struct fc_frame *fp, struct mfc_vhba *vhba)
 	fh = fc_frame_header_get(fp);
 
 	se_sess = vhba->vhba_sess;
+       if (!se_sess) {
+               pr_err("No se_sess to handle cmd\n");
+               return;
+       }
 
 	tag = percpu_ida_alloc(&se_sess->sess_tag_pool, GFP_KERNEL);
 	mfc_cmd = &((struct mfc_cmd *)se_sess->sess_cmd_map)[tag];
@@ -828,6 +835,9 @@ static void mfc_fcp_scsi_rx(struct fc_frame *fp, struct mfc_vhba *vhba)
 
 	fexch = &vhba->fexch[ts->local_exch_id];
 	fexch->context = (void *)ts;
+
+       pr_debug("FCP cmd rport_id %x rxid %x oxid %x\n", ts->rport_id,
+                ts->remote_exch_id, ts->local_exch_id);
 
 	se_cmd = &mfc_cmd->se_cmd;
 	unpacked_lun = scsilun_to_int(&fcp->fc_lun);
@@ -863,7 +873,7 @@ static void mfc_fcp_scsi_rx(struct fc_frame *fp, struct mfc_vhba *vhba)
 		task_attr = MSG_SIMPLE_TAG;
 		break;
 	}
-	
+
 	rc = target_submit_cmd(se_cmd, se_sess, &fcp->fc_cdb[0],
 			       &mfc_cmd->sense_buf[0], unpacked_lun,
 			       data_length, task_attr, data_dir,
