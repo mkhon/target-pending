@@ -768,8 +768,8 @@ static int mfc_handle_prli(struct fc_frame *fp, struct mfc_vhba *vhba)
 
 	memset(&wwpn, 0, 32);
 	snprintf(wwpn, 32, "21:00:%02x:%02x:%02x:%02x:%02x:%02x",
-		 vhba->fc_mac[0], vhba->fc_mac[1], vhba->fc_mac[2],
-		 vhba->fc_mac[3], vhba->fc_mac[4], vhba->fc_mac[5]);
+		 vhba->dest_addr[0], vhba->dest_addr[1], vhba->dest_addr[2],
+		 vhba->dest_addr[3], vhba->dest_addr[4], vhba->dest_addr[5]);
 
 	mfc_port = vhba->mfc_port;
 	se_tpg = &mfc_port->mlx4_fc_port.mfc_tpg_1.se_tpg;
@@ -984,7 +984,9 @@ static void mfc_rx_rfci(struct work_struct *work)
 
        case FC_RCTL_ELS_REQ:
                if (fc_frame_payload_op(fp) == ELS_PRLI)
-                       mfc_handle_prli(fp, vhba);
+			rc = mfc_handle_prli(fp, vhba);
+			if (rc)
+				goto free_packet;
                break;
 
        case FC_RCTL_DD_UNSOL_CMD:
