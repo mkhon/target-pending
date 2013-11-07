@@ -54,6 +54,79 @@
 #include <scsi/libfc.h>
 
 #include "mfc.h"
+#include "mlx4_fc_fabric.h"
+
+static void mfc_exch_unreg_rdma_mem(struct mfc_dev *mfc_dev,
+				    struct trans_start *ts,
+				    struct mfc_exch *fexch)
+{
+	struct mfc_cmd *mfc_cmd = container_of(ts, struct mfc_cmd, ts);
+	struct se_cmd *se_cmd = &mfc_cmd->se_cmd;
+
+	if (ts->type == MFC_TGT_RDMA_NONE)
+		return;
+
+	pci_unmap_sg(mfc_dev->dev->pdev, se_cmd->t_data_sg,
+		     se_cmd->t_data_nents,
+		     (ts->type == MFC_TGT_RDMA_WRITE) ?
+		     PCI_DMA_TODEVICE : PCI_DMA_FROMDEVICE);
+	ts->lkey = 0;
+	ts->rkey = 0;
+}
+
+static void mfc_exch_err_comp(void *arg, struct mlx4_cqe *g_cqe)
+{
+	struct mfc_vhba *vhba = (struct mfc_vhba *)arg;
+	struct mlx4_err_cqe *cqe = (struct mlx4_err_cqe *)g_cqe;
+	struct mfc_exch *fexch;
+	struct mfc_queue *sq;
+	int wqe_idx;
+	int xno;
+	u32 qpn;
+	unsigned long flags;
+	struct trans_start *ts;
+	struct mfcoe_cmd_send_tx_desc *tx_desc;
+
+	qpn = be32_to_cpu(cqe->my_qpn) & ((1 << 24) - 1);
+	xno = qpn - vhba->base_fexch_qpn;
+	fexch = &vhba->fexch[xno];
+	sq = &fexch->fc_qp.sq;
+	ts = (struct trans_start *)fexch->context;
+
+	wqe_idx = be16_to_cpu(cqe->wqe_index) & sq->size_mask;
+	tx_desc = sq->buf + wqe_idx * FEXCH_SQ_BB_SIZE;
+
+	if (cqe->syndrome != MLX4_CQE_SYNDROME_WR_FLUSH_ERR) {
+		shost_printk(KERN_ERR, vhba->lp->host, "Completion with error. "
+				"exch: 0x%x qpn: 0x%x wqe_index: 0x%x vendor: 0x%x syndrome: 0x%x\n",
+				xno,
+				be32_to_cpu(cqe->my_qpn),
+				be16_to_cpu(cqe->wqe_index),
+				cqe->vendor_err_syndrome,
+				cqe->syndrome);
+	}
+
+	if (ts) {
+		mfc_exch_unreg_rdma_mem(vhba->mfc_port->mfc_dev, ts, fexch);
+
+		pci_unmap_single(vhba->mfc_port->mfc_dev->dev->pdev,
+				be64_to_cpu(tx_desc->data.addr),
+				be32_to_cpu(tx_desc->data.count),
+				PCI_DMA_TODEVICE);
+
+		kfree(ts->fcp_rsp);
+		fexch->context = NULL;
+		fexch->tx_completed = 1;
+
+		mfc_bitmap_slot_free(&vhba->fexch_bm, xno);
+	}
+
+	spin_lock_irqsave(&sq->lock, flags);
+	sq->cons++;
+	spin_unlock_irqrestore(&sq->lock, flags);
+
+	mfc_ring_db_tx(&fexch->fc_qp);
+}
 
 static void mfc_exch_tx_comp(void *arg, struct mlx4_cqe *g_cqe)
 {
@@ -68,107 +141,45 @@ static void mfc_exch_tx_comp(void *arg, struct mlx4_cqe *g_cqe)
 	int is_err;
 	struct trans_start *ts;
 	u8 op = cqe->owner_sr_opcode & MLX4_CQE_OPCODE_MASK;
-
-	qpn = be32_to_cpu(cqe->my_qpn) & ((1 << 24) - 1);
-	xno = qpn - vhba->base_fexch_qpn;
-	fexch = &vhba->fexch[xno];
-	sq = &fexch->fc_qp.sq;
-	ts = (struct trans_start *)fexch->context;
-
-	wqe_idx = be16_to_cpu(cqe->wqe_index) & sq->size_mask;
+	struct mfc_cmd *mfc_cmd;
+	struct mfcoe_cmd_send_tx_desc *tx_desc;
 
 	is_err = (op == 0x1e) ? 1 : 0;
-
 	if (is_err /*&& vhba->fcmd.fc_qp.is_flushing*/) {
-		struct mlx4_err_cqe *cqe_err = (struct mlx4_err_cqe *)g_cqe;
-
-		if (cqe_err->syndrome != MLX4_CQE_SYNDROME_WR_FLUSH_ERR) {
-			shost_printk(KERN_ERR, vhba->lp->host, "Completion with error. "
-				"exch: 0x%x qpn: 0x%x wqe_index: 0x%x vendor: 0x%x syndrome: 0x%x\n",
-				xno,
-				be32_to_cpu(cqe_err->my_qpn),
-				be16_to_cpu(cqe_err->wqe_index),
-				cqe_err->vendor_err_syndrome,
-				cqe_err->syndrome);
-			HEXDUMP(cqe_err, sizeof(*cqe_err));
-		}
-
-		goto out;
+		mfc_exch_err_comp(arg, g_cqe);
+		return;
 	}
-
-
-	fctgt_dbg_ts(ts, "TX completed. qpn: 0x%x, wqe_index: 0x%x, "
-			"opcode: 0x%x\n", be32_to_cpu(cqe->my_qpn),
-			be16_to_cpu(cqe->wqe_index), op);
-
-	if (op == MFC_CMD_OP_RDMA_READ || op == MFC_RFCI_OP_SEND) {
-		struct trans_start *ts = (struct trans_start *)fexch->context;
-
-		if (ts && ts->done)
-			ts->done(vhba, ts);
-	}
-
-out:
-	if (op == MFC_RFCI_OP_SEND) {
-		struct mfcoe_cmd_send_tx_desc *tx_desc = sq->buf + wqe_idx * FEXCH_SQ_BB_SIZE;
-		struct trans_start *ts = (struct trans_start *)fexch->context;
-
-		pci_unmap_single(vhba->mfc_port->mfc_dev->dev->pdev,
-				be64_to_cpu(tx_desc->data.addr),
-				be32_to_cpu(tx_desc->data.count),
-				PCI_DMA_TODEVICE);
-
-		kfree(ts->fcp_rsp);
-		kfree(ts);
-		fexch->context = NULL;
-
-		mfc_bitmap_slot_free(&vhba->fexch_bm, xno);
-		fctgt_dbg("Freeing slot #0x%x\n", xno);
-	}
-
-	fexch->tx_completed = 1;
-
-	spin_lock_irqsave(&sq->lock, flags);
-	sq->cons++;
-	spin_unlock_irqrestore(&sq->lock, flags);
-
-	mfc_ring_db_tx(&fexch->fc_qp);
-}
-
-static void mfc_exch_err_comp(void *arg, struct mlx4_cqe *g_cqe)
-{
-	struct mfc_vhba *vhba = (struct mfc_vhba *)arg;
-	struct mlx4_err_cqe *cqe = (struct mlx4_err_cqe *)g_cqe;
-	struct mfc_exch *fexch;
-	struct mfc_queue *sq;
-	int wqe_idx;
-	int xno;
-	u32 qpn;
-	unsigned long flags;
-	struct trans_start *ts;
 
 	qpn = be32_to_cpu(cqe->my_qpn) & ((1 << 24) - 1);
 	xno = qpn - vhba->base_fexch_qpn;
 	fexch = &vhba->fexch[xno];
 	sq = &fexch->fc_qp.sq;
 	ts = (struct trans_start *)fexch->context;
+	mfc_cmd = container_of(ts, struct mfc_cmd, ts);
 
 	wqe_idx = be16_to_cpu(cqe->wqe_index) & sq->size_mask;
+	tx_desc = sq->buf + wqe_idx * FEXCH_SQ_BB_SIZE;
 
+	switch (op) {
+	case MFC_CMD_OP_RDMA_READ:
+		pr_debug("fexch[%x] RDMA_READ completed."
+			 " qpn: 0x%x, wqe_index: 0x%x cqn: 0x%x\n",
+			 ts->local_exch_id, be32_to_cpu(cqe->my_qpn),
+			 be16_to_cpu(cqe->wqe_index),
+			 vhba->fexch_cq[xno % num_online_cpus()].mcq.cqn);
+		target_execute_cmd(&mfc_cmd->se_cmd);
+		break;
 
-	if (cqe->syndrome != MLX4_CQE_SYNDROME_WR_FLUSH_ERR) {
-		shost_printk(KERN_ERR, vhba->lp->host, "Completion with error. "
-				"exch: 0x%x qpn: 0x%x wqe_index: 0x%x vendor: 0x%x syndrome: 0x%x\n",
-				xno,
-				be32_to_cpu(cqe->my_qpn),
-				be16_to_cpu(cqe->wqe_index),
-				cqe->vendor_err_syndrome,
-				cqe->syndrome);
-	}
+	case MFC_CMD_OP_RDMA_WRITE:
+		pr_debug("fexch[%x] RDMA_WRITE completed."
+			 " qpn: 0x%x, wqe_index: 0x%x cqn: 0x%x\n",
+			 ts->local_exch_id, be32_to_cpu(cqe->my_qpn),
+			 be16_to_cpu(cqe->wqe_index),
+			 vhba->fexch_cq[xno % num_online_cpus()].mcq.cqn);
+		break;
 
-	if (fexch->context) {
-		struct mfcoe_cmd_send_tx_desc *tx_desc = sq->buf + wqe_idx * FEXCH_SQ_BB_SIZE;
-		struct trans_start *ts = (struct trans_start *)fexch->context;
+	case MFC_RFCI_OP_SEND:
+		mfc_exch_unreg_rdma_mem(vhba->mfc_port->mfc_dev, ts, fexch);
 
 		pci_unmap_single(vhba->mfc_port->mfc_dev->dev->pdev,
 				be64_to_cpu(tx_desc->data.addr),
@@ -176,13 +187,17 @@ static void mfc_exch_err_comp(void *arg, struct mlx4_cqe *g_cqe)
 				PCI_DMA_TODEVICE);
 
 		kfree(ts->fcp_rsp);
-		kfree(ts);
 		fexch->context = NULL;
 
 		mfc_bitmap_slot_free(&vhba->fexch_bm, xno);
-	}
+		pr_debug("fexch[%x] FCP_RSP completion cqn: 0x%x."
+			 " Freeing slot #0x%x\n",
+			 ts->local_exch_id,
+			 vhba->fexch_cq[xno % num_online_cpus()].mcq.cqn, xno);
 
-	fexch->tx_completed = 1;
+		fexch->tx_completed = 1;
+		transport_generic_free_cmd(&mfc_cmd->se_cmd, 0);
+	}
 
 	spin_lock_irqsave(&sq->lock, flags);
 	sq->cons++;
@@ -193,7 +208,7 @@ static void mfc_exch_err_comp(void *arg, struct mlx4_cqe *g_cqe)
 
 static void mfc_qp_event(struct mlx4_qp *qp, enum mlx4_event type)
 {
-	printk(KERN_WARNING "qp event for qpn=0x%08x event_type=0x%x\n",
+	pr_err("QP event for qpn=0x%08x event_type=0x%x\n",
 	       qp->qpn, type);
 }
 
@@ -246,8 +261,33 @@ static int mfc_create_fexch(struct mfc_vhba *vhba, int xno)
 	qp->doorbell_qpn = swab32(qp->mqp.qpn << 8);
 	qp->mqp.event = mfc_qp_event;
 
+	err = mlx4_fmr_alloc_reserved(mfc_dev->dev, vhba->base_fexch_mpt + xno,
+			     mfc_dev->priv_pdn | MLX4_MPT_ENABLE_INVALIDATE,
+			     MLX4_PERM_LOCAL_WRITE | MLX4_PERM_LOCAL_READ |
+			     MLX4_PERM_REMOTE_WRITE | MLX4_PERM_REMOTE_READ,
+			     256, 1, PAGE_SHIFT, &fexch->fmr);
+	if (err) {
+		shost_printk(KERN_ERR, vhba->lp->host,
+			     "Alloc fmr for fexch=%x vhba=%d port=%d err=%d\n",
+			     xno, vhba->idx, fc_port->port, err);
+		goto err_free_qp;
+	}
+
+	err = mlx4_fmr_enable(mfc_dev->dev, &fexch->fmr);
+	if (err) {
+		shost_printk(KERN_ERR, vhba->lp->host,
+			     "Enable fmr for fexch=%x vhba=%d port=%d err=%d\n",
+			     xno, vhba->idx, fc_port->port, err);
+		goto err_free_fmr;
+	}
+
 	return 0;
 
+err_free_fmr:
+	mlx4_fmr_free(mfc_dev->dev, &fexch->fmr);
+err_free_qp:
+	mlx4_qp_remove(mfc_dev->dev, &fexch->fc_qp.mqp);
+	mlx4_qp_free(mfc_dev->dev, &fexch->fc_qp.mqp);
 err_free_man:
 	mlx4_free_hwq_res(mfc_dev->dev, &qp->wqres, qp->buf_size);
 err_free_rxinfo:
@@ -384,6 +424,8 @@ static int mfc_destroy_fexch(struct mfc_vhba *vhba, int xno)
 				mfc_bitmap_slot_free(&vhba->fexch_bm, xno);
 		}
 	}
+
+	mlx4_fmr_free(mfc_dev->dev, &fexch->fmr);
 
 	if (qp->is_created)
 		mlx4_qp_to_reset(mfc_dev->dev, &qp->mqp);
@@ -823,42 +865,51 @@ static inline void set_ib_dgram_seg(struct mfc_datagram_seg *dgram,
 	dgram->dqpn = cpu_to_be32(dest_qpn);
 }
 
-static inline void mfc_prep_init_wqe(struct mfc_vhba *vhba, int prod, u32
-		rport_id, u32 rport_maxframe_size, int local_xid,
-		int remote_xid, enum mfc_tgt_trans_type ttype)
+int mfc_exch_post_init_wqe(struct mfc_vhba *vhba, struct trans_start *ts,
+			   struct mfc_exch *fexch)
 {
-	struct mfc_exch *fexch = &vhba->fexch[local_xid];
 	struct mfc_queue *sq = &fexch->fc_qp.sq;
-	int wqe_index = prod & sq->size_mask;
+	int wqe_index;
 	struct mfcoe_cmd_tx_desc *tx_desc;
 	struct mfc_ctrl_seg *ctrl = NULL;
 	struct mfc_init_seg *init = NULL;
-	struct trans_start *ts = (struct trans_start *)fexch->context;
+	u32 prod;
+	unsigned long flags;
 
-	fctgt_dbg_ts(ts, "Preparing init wqe. wqe_index: %d qpn: 0x%x\n", wqe_index, fexch->fc_qp.mqp.qpn);
+	sq = &fexch->fc_qp.sq;
+
+	/* Check available SQ BBs + 1 spare SQ BB for owenership */
+	spin_lock_irqsave(&sq->lock, flags);
+	if (unlikely((u32) (sq->prod - sq->cons - 1) > sq->size - 2)) {
+		spin_unlock_irqrestore(&sq->lock, flags);
+		pr_err("No send wqe, sq full\n");
+		return -EBUSY;
+	}
+
+	prod = sq->prod;
+	sq->prod += 1;
+	spin_unlock_irqrestore(&sq->lock, flags);
+
+	wqe_index = prod & sq->size_mask;
+
+	pr_debug("Init wqe_index: %d qpn: 0x%x rport_id %x remote_xid %x local_xid %x\n",
+		 wqe_index, fexch->fc_qp.mqp.qpn, ts->rport_id,
+		 ts->remote_exch_id, ts->local_exch_id);
 
 	tx_desc = sq->buf + wqe_index * FEXCH_SQ_BB_SIZE;
 	ctrl = &tx_desc->ctrl;
 	init = &tx_desc->init;
 
-	set_ctrl_seg(ctrl,
-			sizeof(struct mfcoe_cmd_tx_desc),
-			wqe_index, /* seq id */
-			ttype == MFC_TGT_RDMA_WRITE ? 1 : 5,
-			0,
-			0,
-			0);
+	set_ctrl_seg(ctrl, sizeof(struct mfcoe_cmd_tx_desc),
+		     wqe_index, /* seq id */
+		     ts->type == MFC_TGT_RDMA_WRITE ? 1 : 5,
+		     0, 0, 0);
 
 	set_eth_dgram_seg(&tx_desc->addr, vhba->fc_vlan_prio, vhba->dest_addr);
 
-	set_init_seg(init,
-			0,
-			rport_maxframe_size,
-			rport_id,
-			0, /* Org */
-			3, /* Write Enable + Read enable */
-			0 /* local_xid */,
-			remote_xid);
+	set_init_seg(init, 0, 1440, ts->rport_id, 0,
+		     ts->type == MFC_TGT_RDMA_WRITE ? 1 : 2,
+		     0 /* local_xid */, ts->remote_exch_id);
 
 	/*
 	 * Ensure new descirptor (and ownership of next descirptor) hits memory
@@ -868,45 +919,37 @@ static inline void mfc_prep_init_wqe(struct mfc_vhba *vhba, int prod, u32
 	ctrl->op_own = cpu_to_be32(MFC_CMD_OP_INIT) |
 		(prod & sq->size ? cpu_to_be32(MFC_BIT_DESC_OWN) : 0);
 
-//	HEXDUMP(tx_desc, sizeof(*tx_desc));
+	return 0;
 }
 
-static inline int mfc_prep_rdma_wqe(struct mfc_vhba *vhba,
-		int prod,
-		u32 rport_id,
-		u32 rport_maxframe_size,
-		int local_xid, int remote_xid,
-		u64 offset, u32 key, int buf_len, enum mfc_tgt_trans_type ttype)
+static inline int
+mfc_prep_rdma_wqe(struct mfc_vhba *vhba, int prod, u32 rport_maxframe_size,
+		  struct trans_start *ts, struct mfc_exch *fexch)
 {
-	struct mfc_exch *fexch = &vhba->fexch[local_xid];
 	struct mfc_queue *sq = &fexch->fc_qp.sq;
 	int wqe_index = prod & sq->size_mask;
 	struct mfcoe_cmd_rdma_desc *tx_desc = sq->buf + wqe_index * FEXCH_SQ_BB_SIZE;
 	struct mfc_ctrl_seg *ctrl = &tx_desc->ctrl;
 	struct mfc_data_seg *data = &tx_desc->data;
-	struct trans_start *ts = (struct trans_start *)fexch->context;
 
-	fctgt_dbg_ts(ts, "Preparing rdma wqe. wqe_index: %d\n", wqe_index);
+	pr_debug("fexch[%x] prep rdma wqe. wqe_index: %d len %d key %x\n",
+		 ts->local_exch_id, wqe_index, ts->xfer_len, ts->lkey);
 
-	set_ctrl_seg(ctrl,
-			sizeof(struct mfcoe_cmd_rdma_desc),
-			wqe_index, /* seq id */
-			ttype == MFC_TGT_RDMA_WRITE ? 1 : 5,
-			0,
-			0,
-			ttype == MFC_TGT_RDMA_WRITE ? 0 : 1);
+	set_ctrl_seg(ctrl, sizeof(struct mfcoe_cmd_rdma_desc),
+		     wqe_index, /* seq id */
+		     ts->type == MFC_TGT_RDMA_WRITE ? 1 : 5, 0, 0,
+		     ts->type == MFC_TGT_RDMA_WRITE ? 0 : 1);
 
 
-	data->addr = cpu_to_be64(offset);
-	data->count = cpu_to_be32(buf_len);
-	data->mem_type = cpu_to_be32(key);
+	data->addr = cpu_to_be64(ts->offset);
+	data->count = cpu_to_be32(ts->xfer_len);
+	data->mem_type = cpu_to_be32(ts->lkey);
 
 	wmb();
 	ctrl->op_own =
-		cpu_to_be32(ttype == MFC_TGT_RDMA_WRITE ? MFC_CMD_OP_RDMA_WRITE : MFC_CMD_OP_RDMA_READ) |
+		cpu_to_be32(ts->type == MFC_TGT_RDMA_WRITE ?
+			    MFC_CMD_OP_RDMA_WRITE : MFC_CMD_OP_RDMA_READ) |
 		(prod & sq->size ? cpu_to_be32(MFC_BIT_DESC_OWN) : 0);
-
-//	HEXDUMP(tx_desc, sizeof(*tx_desc));
 
 	return 0;
 }
@@ -922,9 +965,9 @@ static inline int mfc_prep_send_wqe(struct mfc_vhba *vhba, int local_xid, int pr
 	struct mfc_ctrl_seg *ctrl = NULL;
 	struct mfc_data_seg *data = NULL;
 	dma_addr_t dma;
-	struct trans_start *ts = (struct trans_start *)fexch->context;
 
-	fctgt_dbg_ts(ts, "Preparing send wqe. wqe_index: %d\n", wqe_index);
+	pr_debug("fexch[%x] send FCP_RSP. wqe_index: %d rsp_len %d\n",
+		 local_xid, wqe_index, buf_len);
 
 	tx_desc = sq->buf + wqe_index * FEXCH_SQ_BB_SIZE;
 	ctrl = &tx_desc->ctrl;
@@ -954,9 +997,76 @@ static inline int mfc_prep_send_wqe(struct mfc_vhba *vhba, int local_xid, int pr
 	ctrl->op_own = cpu_to_be32(MFC_RFCI_OP_SEND) |
 		(prod & sq->size ? cpu_to_be32(MFC_BIT_DESC_OWN) : 0);
 
-//	HEXDUMP(tx_desc, sizeof(*tx_desc));
+	return 0;
+}
+
+static int mfc_reg_rdma_mem(struct mfc_vhba *vhba, struct trans_start *ts,
+			    struct mfc_exch *fexch)
+{
+	struct mfc_dev *mfc_dev = vhba->mfc_port->mfc_dev;
+	struct mfc_cmd *mfc_cmd = container_of(ts, struct mfc_cmd, ts);
+	struct se_cmd *se_cmd = &mfc_cmd->se_cmd;
+	struct scatterlist *sgl, *sg;
+	u64 *pages;
+	u32 nents, count, npages, len, k, total_len;
+	int rc, i;
+
+	pages = (u64 *) __get_free_page(GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	sgl = se_cmd->t_data_sg;
+	nents = se_cmd->t_data_nents;
+
+	count = pci_map_sg(mfc_dev->dev->pdev, sgl, nents,
+			   (ts->type == MFC_TGT_RDMA_WRITE) ?
+			   PCI_DMA_TODEVICE : PCI_DMA_FROMDEVICE);
+	if (unlikely(!count)) {
+		rc = -EAGAIN;
+		pr_err("pci_map_sg failed\n");
+		goto err_free_pages;
+	}
+
+	npages = 0;
+	total_len = 0;
+	ts->offset = 0;
+	for_each_sg(sgl, sg, count, i) {
+		len = sg_dma_len(sg);
+		total_len += len;
+
+		for (k = 0; k < len;) {
+			pages[npages++] = sg_dma_address(sg) + k;
+			pr_debug("fexch[%x] sg[%d] pg_list[%d] p_addr 0x%016llx\n",
+				 ts->local_exch_id, i, npages - 1, pages[npages - 1]);
+			k += PAGE_SIZE;
+		}
+	}
+
+	if (ts->xfer_len != total_len) {
+		pr_err("fexch[%x] xfer_len %d != total_len %d\n",
+			ts->local_exch_id, ts->xfer_len, total_len);
+		ts->xfer_len = total_len;
+	}
+
+	rc = mlx4_map_phys_fmr(mfc_dev->dev, &fexch->fmr, pages,
+			       npages, 0, &ts->lkey, &ts->rkey);
+	if (rc) {
+		pr_err("fexch[%x] map_phys fmr err = %d\n",
+			ts->local_exch_id, rc);
+		goto err_unmap;
+	}
+
+	free_page((unsigned long) pages);
 
 	return 0;
+
+err_unmap:
+	pci_unmap_sg(mfc_dev->dev->pdev, sgl, nents,
+		     (ts->type == MFC_TGT_RDMA_WRITE) ?
+		     PCI_DMA_TODEVICE : PCI_DMA_FROMDEVICE);
+err_free_pages:
+	free_page((unsigned long) pages);
+	return rc;
 }
 
 int mfc_send_data(struct mfc_vhba *vhba, struct trans_start *ts)
@@ -966,13 +1076,10 @@ int mfc_send_data(struct mfc_vhba *vhba, struct trans_start *ts)
 	struct mfc_exch *fexch;
 	struct mlx4_dev *mdev;
 	struct mfc_queue *sq;
-	int wqes_needed;
-
 	u32 prod;
 	unsigned long flags;
 	int rc;
-
-	u32 rport_maxframe_size = 2112;
+	u32 rport_maxframe_size = 1440;
 
 	if (vhba->going_down) {
 		printk(KERN_ERR "queuecommand while going down\n");
@@ -992,39 +1099,35 @@ int mfc_send_data(struct mfc_vhba *vhba, struct trans_start *ts)
 	/* prepare FEXCH for command */
 
 	fexch = &vhba->fexch[ts->local_exch_id];
-	ts->local_exch_id = ts->local_exch_id;
-
 	fexch->state = FEXCH_OK;
 	fexch->tx_completed = 0;
-
 	sq = &fexch->fc_qp.sq;
-
-	wqes_needed = ts->xfer_len > 0 ? 2 : 1;
 
 	/* Check available SQ BBs + 1 spare SQ BB for owenership */
 	spin_lock_irqsave(&sq->lock, flags);
-	if (unlikely((u32) (sq->prod - sq->cons - 1) > sq->size - 1 - wqes_needed)) {
+	if (unlikely((u32) (sq->prod - sq->cons - 1) > sq->size - 2)) {
 		spin_unlock_irqrestore(&sq->lock, flags);
+		pr_err("No send wqe, sq full\n");
 		rc = -EBUSY;
 		goto err_slot_free;
 	}
 
 	prod = sq->prod;
-	sq->prod += wqes_needed;
+	sq->prod += 1;
 	spin_unlock_irqrestore(&sq->lock, flags);
 
-	/* INIT initialize FEXCH */
-	mfc_prep_init_wqe(vhba, prod, ts->rport_id, rport_maxframe_size,
-		       ts->local_exch_id, ts->remote_exch_id, ts->type);
-	prod++;
-
 	if (ts->xfer_len > 0) {
+		/* Register RDMA mem */
+		rc = mfc_reg_rdma_mem(vhba, ts, fexch);
+		if (rc) {
+			spin_lock_irqsave(&sq->lock, flags);
+			sq->prod -= 1;
+			spin_unlock_irqrestore(&sq->lock, flags);
+			goto err_slot_free;
+		}
+
 		/* RDMA Issue RDMA read/write */
-		mfc_prep_rdma_wqe(vhba, prod, ts->rport_id,
-				rport_maxframe_size, ts->local_exch_id,
-				ts->remote_exch_id, ts->offset, ts->key,
-				ts->xfer_len, ts->type);
-		prod++;
+		mfc_prep_rdma_wqe(vhba, prod, rport_maxframe_size, ts, fexch);
 	}
 
 	/* Ring doorbell! */
@@ -1039,25 +1142,61 @@ err_slot_free:
 
 	return rc;
 }
-EXPORT_SYMBOL(mfc_send_data);
 
 int mfc_send_resp(struct mfc_vhba *vhba, struct trans_start *ts)
 {
 	struct mfc_dev *mfc_dev = vhba->mfc_port->mfc_dev;
+	struct mfc_cmd *mfc_cmd = container_of(ts, struct mfc_cmd, ts);
+	struct se_cmd *se_cmd = &mfc_cmd->se_cmd;
 	struct mfc_exch *fexch;
 	struct mfc_queue *sq;
-
-	u32 prod;
+	u32 prod, len;
 	unsigned long flags;
+	struct fcp_resp_with_ext *fcp_rsp;
 	int rc = 0;
 
-	fexch = &vhba->fexch[ts->local_exch_id];
+	len = sizeof(*fcp_rsp) + se_cmd->scsi_sense_length;
+	fcp_rsp = kzalloc(len, GFP_KERNEL);
+	if (!fcp_rsp) {
+		pr_err("No memory to send fcp_rsp exch %x\n", ts->local_exch_id);
+		rc = -ENOMEM;
+		goto err;
+	}
 
+	ts->fcp_rsp_len = len;
+	ts->fcp_rsp = fcp_rsp;
+
+	fcp_rsp->resp.fr_status = se_cmd->scsi_status;
+	len = se_cmd->scsi_sense_length;
+	if (len) {
+		fcp_rsp->resp.fr_flags |= FCP_SNS_LEN_VAL;
+		fcp_rsp->ext.fr_sns_len = htonl(len);
+		memcpy((fcp_rsp + 1), se_cmd->sense_buffer, len);
+	}
+
+	/*
+	 * Test undeflow & overflow. Bidi commands are not handled yet
+	 */
+	if (se_cmd->se_cmd_flags & (SCF_OVERFLOW_BIT | SCF_UNDERFLOW_BIT)) {
+		if (se_cmd->se_cmd_flags & SCF_OVERFLOW_BIT)
+			fcp_rsp->resp.fr_flags |= FCP_RESID_OVER;
+		else
+			fcp_rsp->resp.fr_flags |= FCP_RESID_UNDER;
+		fcp_rsp->ext.fr_resid = cpu_to_be32(se_cmd->residual_count);
+		pr_debug("fexch[%x] %s resid %d\n", ts->local_exch_id,
+			 (se_cmd->se_cmd_flags & SCF_OVERFLOW_BIT) ? "OVERRUN" : "UNDERRUN",
+			 se_cmd->residual_count);
+	}
+
+	pr_debug("fexch[%x] cmd status %d\n", ts->local_exch_id, se_cmd->scsi_status);
+
+	fexch = &vhba->fexch[ts->local_exch_id];
 	sq = &fexch->fc_qp.sq;
 
 	spin_lock_irqsave(&sq->lock, flags);
 	if (unlikely((u32) (sq->prod - sq->cons - 1) > sq->size - 2)) {
 		spin_unlock_irqrestore(&sq->lock, flags);
+		pr_err("fexch[%x] no wqe to send FCP_RSP\n", ts->local_exch_id);
 		rc = -EBUSY;
 		goto err;
 	}
@@ -1078,4 +1217,3 @@ int mfc_send_resp(struct mfc_vhba *vhba, struct trans_start *ts)
 err:
 	return rc;
 }
-EXPORT_SYMBOL(mfc_send_resp);

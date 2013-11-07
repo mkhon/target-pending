@@ -259,7 +259,6 @@ int mlx4_fc_queue_data_in(struct se_cmd *se_cmd)
 	struct mfc_vhba *vhba = se_cmd->se_sess->fabric_sess_ptr;
 	int rc;
 
-#warning FIXME: Fill in rest of *ts for RDMA_WRITE
 	rc = mfc_send_data(vhba, ts);
 	if (rc)
 		return rc;

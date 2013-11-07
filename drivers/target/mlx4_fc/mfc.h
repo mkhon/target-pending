@@ -60,6 +60,7 @@
 #include <scsi/fc/fc_fcoe.h>
 
 #include <target/target_core_base.h>
+#include <target/target_core_fabric.h>
 #include "mlx4_fc_base.h"
 
 #define MFC_CMD_TIMEOUT			(5 * HZ)
@@ -359,6 +360,7 @@ enum mfc_exch_state {
 struct mfc_exch {
 	struct mfc_vhba *vhba;
 	struct mfc_qp fc_qp;
+	struct mlx4_fmr fmr;
 	int tx_completed;
 	int mtu;
 	int fcmd_wqe_idx;
@@ -625,8 +627,9 @@ struct mfc_rx_thread {
 };
 
 enum mfc_tgt_trans_type {
-	MFC_TGT_RDMA_READ = 0,
-	MFC_TGT_RDMA_WRITE = 1,
+	MFC_TGT_RDMA_NONE = 0,
+	MFC_TGT_RDMA_READ = 1,
+	MFC_TGT_RDMA_WRITE = 2,
 };
 
 struct trans_start {
@@ -639,7 +642,8 @@ struct trans_start {
 	u32 fcp_rsp_len;
 
 	u64 offset;
-	u32 key;
+	u32 lkey;
+	u32 rkey;
 	u32 xfer_len;
 
 	u32 tgt_buf_id;
@@ -803,6 +807,8 @@ extern void mlx4_fc_deregister_fip_ctlr(enum mfc_net_type net_type);
 struct sk_buff *mfc_alloc_fc_frame(struct mfc_vhba *vhba);
 int mfc_send_data(struct mfc_vhba *vhba, struct trans_start *ts);
 int mfc_send_resp(struct mfc_vhba *vhba, struct trans_start *ts);
+int mfc_exch_post_init_wqe(struct mfc_vhba *vhba, struct trans_start *ts,
+			   struct mfc_exch *fexch);
 
 /* sysfs */
 int mfc_sysfs_setup(void);

@@ -836,22 +836,23 @@ static void mfc_fcp_scsi_rx(struct fc_frame *fp, struct mfc_vhba *vhba)
 	fexch = &vhba->fexch[ts->local_exch_id];
 	fexch->context = (void *)ts;
 
-       pr_debug("FCP cmd rport_id %x rxid %x oxid %x\n", ts->rport_id,
-                ts->remote_exch_id, ts->local_exch_id);
-
 	se_cmd = &mfc_cmd->se_cmd;
 	unpacked_lun = scsilun_to_int(&fcp->fc_lun);
 	data_length = htonl(fcp->fc_dl);
+	ts->xfer_len = data_length;
 
 	switch (fcp->fc_flags & (FCP_CFL_RDDATA | FCP_CFL_WRDATA)) {
 	case 0:
 		data_dir = DMA_NONE;
+		ts->type = MFC_TGT_RDMA_NONE;
 		break;
 	case FCP_CFL_RDDATA:
 		data_dir = DMA_FROM_DEVICE;
+		ts->type = MFC_TGT_RDMA_WRITE;
 		break;
 	case FCP_CFL_WRDATA:
 		data_dir = DMA_TO_DEVICE;
+		ts->type = MFC_TGT_RDMA_READ;
 		break;
 	case FCP_CFL_WRDATA | FCP_CFL_RDDATA:
 		pr_err("BIDI not supported by mfc_target yet..\n");
@@ -874,13 +875,31 @@ static void mfc_fcp_scsi_rx(struct fc_frame *fp, struct mfc_vhba *vhba)
 		break;
 	}
 
+	pr_debug("FCP_CMD[%x] rport_id %x remote_xid %x fexch[%x] data_len %d\n",
+		 fcp->fc_cdb[0], ts->rport_id,
+		 ts->remote_exch_id, ts->local_exch_id, data_length);
+
+	/* initialize fexch for this command */
+	rc = mfc_exch_post_init_wqe(vhba, ts, fexch);
+	if (rc < 0) {
+		pr_err("No free wqe on vhba=%d port=%d fexch %d\n",
+			vhba->idx, vhba->mfc_port->port, ts->local_exch_id);
+		mfc_bitmap_slot_free(&vhba->fexch_bm, ts->local_exch_id);
+#warning FIXME: Fix tag leak
+		return;
+	}
+
 	rc = target_submit_cmd(se_cmd, se_sess, &fcp->fc_cdb[0],
 			       &mfc_cmd->sense_buf[0], unpacked_lun,
 			       data_length, task_attr, data_dir,
 			       TARGET_SCF_ACK_KREF);
-	if (rc < 0)
+	if (rc < 0) {
+		mfc_bitmap_slot_free(&vhba->fexch_bm, ts->local_exch_id);
+		pr_err("Fail to submit cmd vhba=%d port=%d fexch %d\n",
+			vhba->idx, vhba->mfc_port->port, ts->local_exch_id);
 #warning FIXME: Fix tag leak
 		return;
+	}
 }
 
 static void mfc_rx_rfci(struct work_struct *work)
@@ -972,7 +991,6 @@ static void mfc_rx_rfci(struct work_struct *work)
                if (fh->fh_type == FC_TYPE_FCP) {
 			pr_debug("%s: DD_UNSOL_CMD 0x_id %hx\n",
 				 __func__, ntohs(fh->fh_ox_id));
-			HEXDUMP(skb->data, fr_len);
 
 			mfc_fcp_scsi_rx(fp, vhba);
 			return;
