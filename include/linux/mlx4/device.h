@@ -1078,6 +1078,9 @@ void mlx4_unregister_vlan(struct mlx4_dev *dev, u8 port, int index);
 
 int mlx4_map_phys_fmr(struct mlx4_dev *dev, struct mlx4_fmr *fmr, u64 *page_list,
 		      int npages, u64 iova, u32 *lkey, u32 *rkey);
+int mlx4_fmr_alloc_reserved(struct mlx4_dev *dev, u32 mridx, u32 pd,
+			    u32 access, int max_pages, int max_maps,
+			    u8 page_shift, struct mlx4_fmr *fmr);
 int mlx4_fmr_alloc(struct mlx4_dev *dev, u32 pd, u32 access, int max_pages,
 		   int max_maps, u8 page_shift, struct mlx4_fmr *fmr);
 int mlx4_fmr_enable(struct mlx4_dev *dev, struct mlx4_fmr *fmr);
