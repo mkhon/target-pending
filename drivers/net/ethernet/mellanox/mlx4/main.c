@@ -362,12 +362,10 @@ static int mlx4_dev_cap(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap)
 		(1 << dev->caps.log_num_vlans) *
 		(1 << dev->caps.log_num_prios) *
 		dev->caps.num_ports;
-	dev->caps.reserved_qps_cnt[MLX4_QP_REGION_FC_EXCH] = MLX4_NUM_FEXCH;
 
 	dev->caps.reserved_qps = dev->caps.reserved_qps_cnt[MLX4_QP_REGION_FW] +
 		dev->caps.reserved_qps_cnt[MLX4_QP_REGION_ETH_ADDR] +
-		dev->caps.reserved_qps_cnt[MLX4_QP_REGION_FC_ADDR] +
-		dev->caps.reserved_qps_cnt[MLX4_QP_REGION_FC_EXCH];
+		dev->caps.reserved_qps_cnt[MLX4_QP_REGION_FC_ADDR];
 
 	dev->caps.sqp_demux = (mlx4_is_master(dev)) ? MLX4_MAX_NUM_SLAVES : 0;
 

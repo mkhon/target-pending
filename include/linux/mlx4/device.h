@@ -299,7 +299,6 @@ enum mlx4_qp_region {
 	MLX4_QP_REGION_FW = 0,
 	MLX4_QP_REGION_ETH_ADDR,
 	MLX4_QP_REGION_FC_ADDR,
-	MLX4_QP_REGION_FC_EXCH,
 	MLX4_NUM_QP_REGION
 };
 
@@ -320,10 +319,6 @@ enum mlx4_steer_type {
 	MLX4_MC_STEER = 0,
 	MLX4_UC_STEER,
 	MLX4_NUM_STEERS
-};
-
-enum {
-	MLX4_NUM_FEXCH          = 64 * 1024,
 };
 
 enum {
