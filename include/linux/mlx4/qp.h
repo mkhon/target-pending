@@ -206,7 +206,16 @@ struct mlx4_qp_context {
 	u8			reserved4[2];
 	u8			mtt_base_addr_h;
 	__be32			mtt_base_addr_l;
-	u32			reserved5[10];
+	u8			VE;
+	u8			reserved5;
+	__be16			VFT_id_prio;
+	u8			reserved6;
+	u8			exch_size;
+	__be16			exch_base;
+	u8			VFT_hop_cnt;
+	u8			my_fc_id_idx;
+	__be16			reserved7;
+	u32			reserved8[7];
 };
 
 struct mlx4_update_qp_context {
