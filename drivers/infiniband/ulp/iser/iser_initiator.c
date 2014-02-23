@@ -255,6 +255,14 @@ int iser_alloc_rx_descriptors(struct iser_conn *ib_conn, struct iscsi_session *s
 	ib_conn->qp_max_recv_dtos_mask = session->cmds_max - 1; /* cmds_max is 2^N */
 	ib_conn->min_posted_rx = ib_conn->qp_max_recv_dtos >> 2;
 
+	/* Check T10-PI support request against device capability */
+	if (ib_conn->pi_support &&
+	    !(device->dev_attr.device_cap_flags & IB_DEVICE_SIGNATURE_HANDOVER)) {
+		iser_err("T10-PI requested but not supported on device %s\n",
+			 device->ib_device->name);
+		return -EINVAL;
+	}
+
 	if (device->iser_alloc_rdma_reg_res(ib_conn, session->scsi_cmds_max))
 		goto create_rdma_reg_res_failed;
 
