@@ -109,6 +109,7 @@ struct virtio_scsi_config {
 #define VIRTIO_SCSI_F_INOUT                    0
 #define VIRTIO_SCSI_F_HOTPLUG                  1
 #define VIRTIO_SCSI_F_CHANGE                   2
+#define VIRTIO_SCSI_F_T10_PI                   3
 
 /* Response codes */
 #define VIRTIO_SCSI_S_OK                       0
