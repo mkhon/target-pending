@@ -753,6 +753,9 @@ int iser_connect(struct iser_conn   *ib_conn,
 
 	ib_conn->state = ISER_CONN_PENDING;
 
+	/* connection T10-PI support */
+	ib_conn->pi_support = iser_pi_enable;
+
 	iser_conn_get(ib_conn); /* ref ib conn's cma id */
 	ib_conn->cma_id = rdma_create_id(iser_cma_handler,
 					     (void *)ib_conn,
