@@ -44,3 +44,4 @@ source "drivers/target/iscsi/Kconfig"
 source "drivers/target/sbp/Kconfig"
 
 endif
+source "drivers/target/nvme_of/Kconfig"
