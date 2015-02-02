@@ -1039,7 +1039,8 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 	struct virtio_scsi_cmd_req v_req;
 	struct virtio_scsi_cmd_req_pi v_req_pi;
 	struct vhost_scsi_cmd *cmd;
-	struct iovec *iov_out, *prot_iov, *data_iov;
+	struct iovec *prot_iov, *data_iov;
+	struct iov_iter out_iter;
 	u64 tag;
 	u32 exp_data_len, data_direction;
 	unsigned out, in, i;
@@ -1135,18 +1136,21 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 		 * single iovec may contain both the header + outgoing
 		 * WRITE payloads.
 		 *
-		 * memcpy_fromiovec_out() is modifying the iovecs as it
-		 * copies over req_size bytes into req, so the returned
-		 * iov_out will contain the correct start + offset of the
-		 * outgoing WRITE payload, if DMA_TO_DEVICE is set.
+		 * copy_from_iter() is modifying the iovecs as copies over
+		 * req_size bytes into req, so the returned out_iter.iov[0]
+		 * will contain the correct start + offset of the outgoing
+		 * WRITE payload, if DMA_TO_DEVICE is set.
 		 */
-		ret = memcpy_fromiovec_out(req, &vq->iov[0], &iov_out, req_size);
-		if (unlikely(ret)) {
-			vq_err(vq, "Faulted on virtio_scsi_cmd_req\n");
+		iov_iter_init(&out_iter, READ, &vq->iov[0], out,
+			     (data_direction == DMA_TO_DEVICE) ?
+			      req_size + exp_data_len : req_size);
+
+		ret = copy_from_iter(req, req_size, &out_iter);
+		if (unlikely(ret != req_size)) {
+			vq_err(vq, "Faulted on copy_from_iter\n");
 			vhost_scsi_send_bad_target(vs, vq, head, out);
 			continue;
 		}
-
 		/* virtio-scsi spec requires byte 0 of the lun to be 1 */
 		if (unlikely(*lunp != 1)) {
 			vq_err(vq, "Illegal virtio-scsi lun: %u\n", *lunp);
@@ -1175,8 +1179,8 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 		data_off = prot_off = prot_bytes = max_niov = 0;
 
 		if (data_direction == DMA_TO_DEVICE) {
-			data_iov = iov_out;
-			max_niov = (iov_out == &vq->iov[0]) ? out : out - 1;
+			data_iov = (struct iovec *)&out_iter.iov[0];
+			max_niov = (data_iov == &vq->iov[0]) ? out : out - 1;
 		} else if (data_direction == DMA_FROM_DEVICE) {
 			ret = vhost_skip_iovec_bytes(rsp_size, in,
 						     &vq->iov[out], 0,
