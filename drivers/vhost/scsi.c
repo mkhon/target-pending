@@ -997,9 +997,9 @@ vhost_scsi_send_bad_target(struct vhost_scsi *vs,
 		pr_err("Faulted on virtio_scsi_cmd_resp\n");
 }
 
-int vhost_skip_iovec_bytes(size_t bytes, int max_niov,
-			   struct iovec *iov_in, size_t off_in,
-			   struct iovec **iov_out, size_t *off_out)
+static int vhost_skip_iovec_bytes(size_t bytes, int max_niov,
+				  struct iovec *iov_in, size_t off_in,
+				  struct iovec **iov_out, size_t *off_out)
 {
 	int i = 0;
 
