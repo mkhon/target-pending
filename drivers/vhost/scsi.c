@@ -1183,15 +1183,13 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 
 		if (data_direction == DMA_TO_DEVICE) {
 			data_iter = out_iter;
-			max_niov = (&out_iter.iov[0] == &vq->iov[0]) ?
-				    out : out - 1;
+			max_niov = out_iter.nr_segs;
 		} else if (data_direction == DMA_FROM_DEVICE) {
 			iov_iter_init(&in_iter, WRITE, &vq->iov[out], in,
 				      rsp_size + exp_data_len);
 			iov_iter_advance(&in_iter, rsp_size);
 			data_iter = in_iter;
-			max_niov = (&in_iter.iov[0] == &vq->iov[out]) ?
-				    in : in - 1;
+			max_niov = in_iter.nr_segs;
 		}
 		/*
 		 * If T10_PI header + payload is present, setup prot_iov + prot_off
