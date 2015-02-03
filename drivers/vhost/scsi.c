@@ -837,6 +837,12 @@ vhost_scsi_calc_sgls(struct iov_iter *iter, size_t bytes,
 
 	*niov = 0;
 
+	if (!iter || !iter->iov) {
+		pr_err("%s: iter->iov is NULL, but expected bytes: %zu"
+		       " present\n", __func__, bytes);
+		return -EINVAL;
+	}
+
 	while (tmp < bytes) {
 		void __user *base = iter->iov[*niov].iov_base + off;
 		size_t len = iter->iov[*niov].iov_len - off;
@@ -894,11 +900,6 @@ vhost_scsi_mapal(struct vhost_scsi_cmd *cmd, int max_niov,
 	bool write = (cmd->tvc_data_direction == DMA_FROM_DEVICE);
 
 	if (prot_bytes) {
-		if (!prot_iter->iov) {
-			pr_err("%s: prot_iter->iov is NULL, but prot_bytes:"
-			       " %zu present\n", __func__, prot_bytes);
-			return -EINVAL;
-		}
 		sgl_count = vhost_scsi_calc_sgls(prot_iter, prot_bytes,
 						 &niov, max_niov,
 						 VHOST_SCSI_PREALLOC_PROT_SGLS);
@@ -918,11 +919,6 @@ vhost_scsi_mapal(struct vhost_scsi_cmd *cmd, int max_niov,
 			return ret;
 		}
 		max_niov -= niov;
-	}
-	if (!data_iter->iov) {
-		pr_err("%s: data_iter->iov is NULL, but data_bytes: %zu"
-		       " present\n", __func__, data_bytes);
-		return -EINVAL;
 	}
 	sgl_count = vhost_scsi_calc_sgls(data_iter, data_bytes, &niov,
 					 max_niov, VHOST_SCSI_PREALLOC_SGLS);
