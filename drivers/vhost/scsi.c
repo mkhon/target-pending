@@ -1192,9 +1192,9 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 			max_niov = in_iter.nr_segs;
 		}
 		/*
-		 * If T10_PI header + payload is present, setup prot_iov + prot_off
-		 * values and recalculate data_iov + data_off for vhost_scsi_mapal()
-		 * mapping to host scatterlists via get_user_pages_fast().
+		 * If T10_PI header + payload is present, setup prot_iter values
+		 * and recalculate data_iter for vhost_scsi_mapal() mapping to
+		 * host scatterlists via get_user_pages_fast().
 		 */
 		if (t10_pi) {
 			if (v_req_pi.pi_bytesout) {
@@ -1215,12 +1215,11 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 				prot_bytes = vhost32_to_cpu(vq, v_req_pi.pi_bytesin);
 			}
 			/*
-			 * Set prot_iov + prot_off values used by the iovec ->
-			 * SGL mapping logic below, and determine expected data
-			 * length minus the protection payload length.
+			 * Set prot_iter to data_iter, and advance past any
+			 * preceeding prot_bytes that may be present.
 			 *
-			 * Also set data_iov + data_off at start of data payload
-			 * beyond the preceeding protection SGLs.
+			 * Also fix up the exp_data_len to reflect only the
+			 * actual data payload length.
 			 */
 			if (prot_bytes) {
 				exp_data_len -= prot_bytes;
