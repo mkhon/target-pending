@@ -1026,7 +1026,7 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 	u64 tag;
 	u32 exp_data_len, data_direction;
 	unsigned out, in, i;
-	int head, ret, prot_bytes, max_niov;
+	int head, ret, prot_bytes;
 	size_t req_size, rsp_size = sizeof(struct virtio_scsi_cmd_resp);
 	size_t out_size, in_size;
 	u16 lun;
@@ -1157,17 +1157,15 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 		 * of the virtio-scsi response header in either the same
 		 * or immediately following iovec.
 		 */
-		prot_bytes = max_niov = 0;
+		prot_bytes = 0;
 
 		if (data_direction == DMA_TO_DEVICE) {
 			data_iter = out_iter;
-			max_niov = out_iter.nr_segs;
 		} else if (data_direction == DMA_FROM_DEVICE) {
 			iov_iter_init(&in_iter, WRITE, &vq->iov[out], in,
 				      rsp_size + exp_data_len);
 			iov_iter_advance(&in_iter, rsp_size);
 			data_iter = in_iter;
-			max_niov = in_iter.nr_segs;
 		}
 		/*
 		 * If T10_PI header + payload is present, setup prot_iter values
@@ -1248,7 +1246,7 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 			 " %d\n", cmd, exp_data_len, prot_bytes, data_direction);
 
 		if (data_direction != DMA_NONE) {
-			ret = vhost_scsi_mapal(cmd, max_niov,
+			ret = vhost_scsi_mapal(cmd,
 					       prot_bytes, &prot_iter,
 					       exp_data_len, &data_iter);
 			if (unlikely(ret)) {
