@@ -829,13 +829,9 @@ out:
 }
 
 static int
-vhost_scsi_calc_sgls(struct iov_iter *iter, size_t bytes,
-		     int *niov, int max_niov, int max_sgls)
+vhost_scsi_calc_sgls(struct iov_iter *iter, size_t bytes, int max_sgls)
 {
-	size_t tmp = 0, off = iter->iov_offset;
 	int sgl_count = 0;
-
-	*niov = 0;
 
 	if (!iter || !iter->iov) {
 		pr_err("%s: iter->iov is NULL, but expected bytes: %zu"
@@ -843,36 +839,24 @@ vhost_scsi_calc_sgls(struct iov_iter *iter, size_t bytes,
 		return -EINVAL;
 	}
 
-	while (tmp < bytes) {
-		void __user *base = iter->iov[*niov].iov_base + off;
-		size_t len = iter->iov[*niov].iov_len - off;
-
-		if (++(*niov) > max_niov) {
-			pr_err("%s: current *niov %d exceeds max_niov: %d\n",
-			       __func__, *niov, max_niov);
-			return -EINVAL;
-		}
-		sgl_count += iov_num_pages(base, len);
-		tmp += min(len, bytes);
-		off = 0;
-	}
+	sgl_count = iov_iter_npages(iter, 0xffff);
 	if (sgl_count > max_sgls) {
 		pr_err("%s: requested sgl_count: %d exceeds pre-allocated"
 		       " max_sgls: %d\n", __func__, sgl_count, max_sgls);
-		return -ENOBUFS;
+		return -EINVAL;
 	}
 	return sgl_count;
 }
 
 static int
 vhost_scsi_iov_to_sgl(struct vhost_scsi_cmd *cmd, bool write,
-		      struct iov_iter *iter, int niov,
-		      struct scatterlist *sg, int sg_count)
+		      struct iov_iter *iter, struct scatterlist *sg,
+		      int sg_count)
 {
 	size_t off = iter->iov_offset;
 	int i, ret;
 
-	for (i = 0; i < niov; i++) {
+	for (i = 0; i < iter->nr_segs; i++) {
 		void __user *base = iter->iov[i].iov_base + off;
 		size_t len = iter->iov[i].iov_len - off;
 
@@ -892,16 +876,15 @@ vhost_scsi_iov_to_sgl(struct vhost_scsi_cmd *cmd, bool write,
 }
 
 static int
-vhost_scsi_mapal(struct vhost_scsi_cmd *cmd, int max_niov,
+vhost_scsi_mapal(struct vhost_scsi_cmd *cmd,
 		 size_t prot_bytes, struct iov_iter *prot_iter,
 		 size_t data_bytes, struct iov_iter *data_iter)
 {
-	int sgl_count = 0, niov, ret;
+	int sgl_count, ret;
 	bool write = (cmd->tvc_data_direction == DMA_FROM_DEVICE);
 
 	if (prot_bytes) {
 		sgl_count = vhost_scsi_calc_sgls(prot_iter, prot_bytes,
-						 &niov, max_niov,
 						 VHOST_SCSI_PREALLOC_PROT_SGLS);
 		if (sgl_count < 0)
 			return sgl_count;
@@ -912,16 +895,15 @@ vhost_scsi_mapal(struct vhost_scsi_cmd *cmd, int max_niov,
 			 cmd->tvc_prot_sgl, cmd->tvc_prot_sgl_count);
 
 		ret = vhost_scsi_iov_to_sgl(cmd, write, prot_iter,
-					    niov, cmd->tvc_prot_sgl,
+					    cmd->tvc_prot_sgl,
 					    cmd->tvc_prot_sgl_count);
 		if (ret < 0) {
 			cmd->tvc_prot_sgl_count = 0;
 			return ret;
 		}
-		max_niov -= niov;
 	}
-	sgl_count = vhost_scsi_calc_sgls(data_iter, data_bytes, &niov,
-					 max_niov, VHOST_SCSI_PREALLOC_SGLS);
+	sgl_count = vhost_scsi_calc_sgls(data_iter, data_bytes,
+					 VHOST_SCSI_PREALLOC_SGLS);
 	if (sgl_count < 0)
 		return sgl_count;
 
@@ -930,7 +912,7 @@ vhost_scsi_mapal(struct vhost_scsi_cmd *cmd, int max_niov,
 	pr_debug("%s data_sg %p data_sgl_count %u\n", __func__,
 		  cmd->tvc_sgl, cmd->tvc_sgl_count);
 
-	ret = vhost_scsi_iov_to_sgl(cmd, write, data_iter, niov,
+	ret = vhost_scsi_iov_to_sgl(cmd, write, data_iter,
 				    cmd->tvc_sgl, cmd->tvc_sgl_count);
 	if (ret < 0) {
 		cmd->tvc_sgl_count = 0;
