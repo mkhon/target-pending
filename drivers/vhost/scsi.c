@@ -1044,14 +1044,13 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 	struct virtio_scsi_cmd_req v_req;
 	struct virtio_scsi_cmd_req_pi v_req_pi;
 	struct vhost_scsi_cmd *cmd;
-	struct iovec *prot_iov, *data_iov;
-	struct iov_iter out_iter;
+	struct iov_iter out_iter, in_iter, prot_iter, data_iter;
 	u64 tag;
 	u32 exp_data_len, data_direction;
 	unsigned out, in, i;
 	int head, ret, prot_bytes, max_niov;
 	size_t req_size, rsp_size = sizeof(struct virtio_scsi_cmd_resp);
-	size_t out_size, in_size, data_off, prot_off;
+	size_t out_size, in_size;
 	u16 lun;
 	u8 *target, *lunp, task_attr;
 	bool t10_pi = vhost_has_feature(vq, VIRTIO_SCSI_F_T10_PI);
@@ -1173,28 +1172,26 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 		 * Determine start of T10_PI or data payload iovec in ANY_LAYOUT
 		 * mode based upon data_direction.
 		 *
-		 * For DMA_TO_DEVICE, this is iov_out from memcpy_fromiovec_out()
+		 * For DMA_TO_DEVICE, this is iov_out from copy_from_iter()
 		 * with the already recalculated iov_base + iov_len.
 		 *
 		 * For DMA_FROM_DEVICE, the iovec will be just past the end
 		 * of the virtio-scsi response header in either the same
 		 * or immediately following iovec.
 		 */
-		data_iov = prot_iov = NULL;
-		data_off = prot_off = prot_bytes = max_niov = 0;
+		prot_bytes = max_niov = 0;
 
 		if (data_direction == DMA_TO_DEVICE) {
-			data_iov = (struct iovec *)&out_iter.iov[0];
-			max_niov = (data_iov == &vq->iov[0]) ? out : out - 1;
+			data_iter = out_iter;
+			max_niov = (&out_iter.iov[0] == &vq->iov[0]) ?
+				    out : out - 1;
 		} else if (data_direction == DMA_FROM_DEVICE) {
-			ret = vhost_skip_iovec_bytes(rsp_size, in,
-						     &vq->iov[out], 0,
-						     &data_iov, &data_off);
-			if (ret < 0) {
-				vhost_scsi_send_bad_target(vs, vq, head, out);
-				continue;
-			}
-			max_niov = in - ret;
+			iov_iter_init(&in_iter, WRITE, &vq->iov[out], in,
+				      rsp_size + exp_data_len);
+			iov_iter_advance(&in_iter, rsp_size);
+			data_iter = in_iter;
+			max_niov = (&in_iter.iov[0] == &vq->iov[out]) ?
+				    in : in - 1;
 		}
 		/*
 		 * If T10_PI header + payload is present, setup prot_iov + prot_off
@@ -1228,17 +1225,9 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 			 * beyond the preceeding protection SGLs.
 			 */
 			if (prot_bytes) {
-				prot_iov = data_iov;
-				prot_off = data_off;
 				exp_data_len -= prot_bytes;
-
-				ret = vhost_skip_iovec_bytes(prot_bytes, max_niov,
-							     prot_iov, prot_off,
-							     &data_iov, &data_off);
-				if (ret < 0) {
-					vhost_scsi_send_bad_target(vs, vq, head, out);
-					continue;
-				}
+				prot_iter = data_iter;
+				iov_iter_advance(&data_iter, prot_bytes);
 			}
 			tag = vhost64_to_cpu(vq, v_req_pi.tag);
 			task_attr = v_req_pi.task_attr;
@@ -1285,8 +1274,8 @@ vhost_scsi_handle_vqal(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 
 		if (data_direction != DMA_NONE) {
 			ret = vhost_scsi_mapal(cmd, max_niov,
-					       prot_bytes, prot_iov, prot_off,
-					       exp_data_len, data_iov, data_off);
+					       prot_bytes, &prot_iter,
+					       exp_data_len, &data_iter);
 			if (unlikely(ret)) {
 				vq_err(vq, "Failed to map iov to sgl\n");
 				vhost_scsi_release_cmd(&cmd->tvc_se_cmd);
