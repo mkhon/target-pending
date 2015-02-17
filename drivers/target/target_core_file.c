@@ -500,6 +500,10 @@ fd_execute_write_same(struct se_cmd *cmd)
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 	sg = &cmd->t_data_sg[0];
+	if (!sg) {
+		target_complete_cmd(cmd, SAM_STAT_CHECK_CONDITION);
+		return 0;
+	}
 
 	if (cmd->t_data_nents > 1 ||
 	    sg->length != cmd->se_dev->dev_attrib.block_size) {
