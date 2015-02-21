@@ -1996,10 +1996,20 @@ isert_cq_comp_err(struct isert_conn *isert_conn, struct ib_wc *wc)
 
 		desc = (struct iser_tx_desc *)(uintptr_t)wc->wr_id;
 		isert_cmd = desc->isert_cmd;
-		if (!isert_cmd)
+		if (!isert_cmd) {
 			isert_unmap_tx_desc(desc, ib_dev);
-		else
-			isert_completion_put(desc, isert_cmd, ib_dev, true);
+		} else {
+			struct isert_device *device = isert_conn->conn_device;
+			struct iscsi_conn *conn = isert_conn->conn;
+			struct iscsi_cmd *cmd = isert_cmd->iscsi_cmd;
+
+			if (cmd->i_state == ISTATE_SEND_LOGOUTRSP &&
+			    conn->conn_state == TARG_CONN_STATE_IN_LOGOUT)
+				isert_response_completion(desc, isert_cmd, isert_conn,
+							  device->ib_device);
+			else
+				isert_completion_put(desc, isert_cmd, ib_dev, true);
+		}
 	} else {
 		isert_conn->post_recv_buf_count--;
 		if (!isert_conn->post_recv_buf_count)
