@@ -4256,11 +4256,12 @@ int iscsit_close_connection(
 	pr_debug("Closing iSCSI connection CID %hu on SID:"
 		" %u\n", conn->cid, sess->sid);
 	/*
-	 * Always up conn_logout_comp just in case the RX Thread is sleeping
-	 * and the logout response never got sent because the connection
-	 * failed.
+	 * Always up conn_logout_comp for the traditional TCP case just in case
+	 * the RX Thread in iscsi_target_rx_opcode() is sleeping and the logout
+	 * response never got sent because the connection failed.
 	 */
-	complete(&conn->conn_logout_comp);
+	if (conn->conn_transport->transport_type == ISCSI_TCP)
+		complete(&conn->conn_logout_comp);
 
 	iscsi_release_thread_set(conn);
 
