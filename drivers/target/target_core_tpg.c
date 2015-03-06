@@ -735,6 +735,7 @@ EXPORT_SYMBOL(core_tpg_register);
 int core_tpg_deregister(struct se_portal_group *se_tpg)
 {
 	struct se_node_acl *nacl, *nacl_tmp;
+	LIST_HEAD(node_list);
 
 	pr_debug("TARGET_CORE[%s]: Deallocating %s struct se_portal_group"
 		" for endpoint: %s Portal Tag %u\n",
@@ -750,25 +751,22 @@ int core_tpg_deregister(struct se_portal_group *se_tpg)
 	while (atomic_read(&se_tpg->tpg_pr_ref_count) != 0)
 		cpu_relax();
 
+	mutex_lock(&se_tpg->acl_node_mutex);
+	list_splice_init(&se_tpg->acl_node_list, &node_list);
+	mutex_unlock(&se_tpg->acl_node_mutex);
 	/*
 	 * Release any remaining demo-mode generated se_node_acl that have
 	 * not been released because of TFO->tpg_check_demo_mode_cache() == 1
 	 * in transport_deregister_session().
 	 */
-	mutex_lock(&se_tpg->acl_node_mutex);
-	list_for_each_entry_safe(nacl, nacl_tmp, &se_tpg->acl_node_list,
-			acl_list) {
+	list_for_each_entry_safe(nacl, nacl_tmp, &node_list, acl_list) {
 		list_del(&nacl->acl_list);
 		se_tpg->num_node_acls--;
-		mutex_unlock(&se_tpg->acl_node_mutex);
 
 		core_tpg_wait_for_nacl_pr_ref(nacl);
 		core_free_device_list_for_node(nacl, se_tpg);
 		se_tpg->se_tpg_tfo->tpg_release_fabric_acl(se_tpg, nacl);
-
-		mutex_lock(&se_tpg->acl_node_mutex);
 	}
-	mutex_unlock(&se_tpg->acl_node_mutex);
 
 	if (se_tpg->se_tpg_type == TRANSPORT_TPG_TYPE_NORMAL)
 		core_tpg_remove_lun(se_tpg, &se_tpg->tpg_virt_lun0);
