@@ -152,7 +152,6 @@ struct se_node_acl *core_tpg_get_initiator_node_acl(struct se_portal_group *tpg,
 		unsigned char *);
 struct se_node_acl *core_tpg_check_initiator_node_acl(struct se_portal_group *,
 		unsigned char *);
-void	core_tpg_clear_object_luns(struct se_portal_group *);
 struct se_node_acl *core_tpg_add_initiator_node_acl(struct se_portal_group *,
 		struct se_node_acl *, const char *, u32);
 int	core_tpg_del_initiator_node_acl(struct se_portal_group *,

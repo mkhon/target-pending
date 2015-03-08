@@ -325,27 +325,6 @@ void core_tpg_wait_for_nacl_pr_ref(struct se_node_acl *nacl)
 		cpu_relax();
 }
 
-void core_tpg_clear_object_luns(struct se_portal_group *tpg)
-{
-	int i;
-	struct se_lun *lun;
-
-	mutex_lock(&tpg->tpg_lun_mutex);
-	for (i = 0; i < TRANSPORT_MAX_LUNS_PER_TPG; i++) {
-		lun = tpg->tpg_lun_list[i];
-
-		if ((lun->lun_status != TRANSPORT_LUN_STATUS_ACTIVE) ||
-		    (lun->lun_se_dev == NULL))
-			continue;
-
-		mutex_unlock(&tpg->tpg_lun_mutex);
-		core_dev_del_lun(tpg, lun);
-		mutex_lock(&tpg->tpg_lun_mutex);
-	}
-	mutex_unlock(&tpg->tpg_lun_mutex);
-}
-EXPORT_SYMBOL(core_tpg_clear_object_luns);
-
 /*	core_tpg_add_initiator_node_acl():
  *
  *
