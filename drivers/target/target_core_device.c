@@ -468,9 +468,8 @@ void core_clear_lun_from_tpg(struct se_lun *lun, struct se_portal_group *tpg)
 	struct se_dev_entry *deve;
 	u32 i, mapped_lun;
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	list_for_each_entry(nacl, &tpg->acl_node_list, acl_list) {
-		spin_unlock_irq(&tpg->acl_node_lock);
 
 		for (i = 0; i < TRANSPORT_MAX_LUNS_PER_TPG; i++) {
 			rcu_read_lock();
@@ -485,10 +484,8 @@ void core_clear_lun_from_tpg(struct se_lun *lun, struct se_portal_group *tpg)
 			core_disable_device_list_for_node(lun, NULL, mapped_lun,
 					TRANSPORT_LUNFLAGS_NO_ACCESS, nacl, tpg);
 		}
-
-		spin_lock_irq(&tpg->acl_node_lock);
 	}
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 }
 
 static struct se_port *core_alloc_port(struct se_device *dev)
@@ -1231,17 +1228,16 @@ struct se_lun *core_dev_add_lun(
 	 */
 	if (tpg->se_tpg_tfo->tpg_check_demo_mode(tpg)) {
 		struct se_node_acl *acl;
-		spin_lock_irq(&tpg->acl_node_lock);
+
+		mutex_lock(&tpg->acl_node_mutex);
 		list_for_each_entry(acl, &tpg->acl_node_list, acl_list) {
 			if (acl->dynamic_node_acl &&
 			    (!tpg->se_tpg_tfo->tpg_check_demo_mode_login_only ||
 			     !tpg->se_tpg_tfo->tpg_check_demo_mode_login_only(tpg))) {
-				spin_unlock_irq(&tpg->acl_node_lock);
 				core_tpg_add_node_to_devs(acl, tpg);
-				spin_lock_irq(&tpg->acl_node_lock);
 			}
 		}
-		spin_unlock_irq(&tpg->acl_node_lock);
+		mutex_unlock(&tpg->acl_node_mutex);
 	}
 
 	return lun;

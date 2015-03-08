@@ -85,7 +85,7 @@ static void core_clear_initiator_node_from_tpg(
 
 /*	__core_tpg_get_initiator_node_acl():
  *
- *	spin_lock_bh(&tpg->acl_node_lock); must be held when calling
+ *	mutex_lock(&tpg->acl_node_mutex); must be held when calling
  */
 struct se_node_acl *__core_tpg_get_initiator_node_acl(
 	struct se_portal_group *tpg,
@@ -111,9 +111,9 @@ struct se_node_acl *core_tpg_get_initiator_node_acl(
 {
 	struct se_node_acl *acl;
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	acl = __core_tpg_get_initiator_node_acl(tpg, initiatorname);
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 
 	return acl;
 }
@@ -306,10 +306,10 @@ struct se_node_acl *core_tpg_check_initiator_node_acl(
 	    (tpg->se_tpg_tfo->tpg_check_demo_mode_login_only(tpg) != 1))
 		core_tpg_add_node_to_devs(acl, tpg);
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	list_add_tail(&acl->acl_list, &tpg->acl_node_list);
 	tpg->num_node_acls++;
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 
 	pr_debug("%s_TPG[%u] - Added DYNAMIC ACL with TCQ Depth: %d for %s"
 		" Initiator Node: %s\n", tpg->se_tpg_tfo->get_fabric_name(),
@@ -359,7 +359,7 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 {
 	struct se_node_acl *acl = NULL;
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	acl = __core_tpg_get_initiator_node_acl(tpg, initiatorname);
 	if (acl) {
 		if (acl->dynamic_node_acl) {
@@ -367,7 +367,7 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 			pr_debug("%s_TPG[%u] - Replacing dynamic ACL"
 				" for %s\n", tpg->se_tpg_tfo->get_fabric_name(),
 				tpg->se_tpg_tfo->tpg_get_tag(tpg), initiatorname);
-			spin_unlock_irq(&tpg->acl_node_lock);
+			mutex_unlock(&tpg->acl_node_mutex);
 			/*
 			 * Release the locally allocated struct se_node_acl
 			 * because * core_tpg_add_initiator_node_acl() returned
@@ -383,10 +383,10 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 			" Node %s already exists for TPG %u, ignoring"
 			" request.\n",  tpg->se_tpg_tfo->get_fabric_name(),
 			initiatorname, tpg->se_tpg_tfo->tpg_get_tag(tpg));
-		spin_unlock_irq(&tpg->acl_node_lock);
+		mutex_unlock(&tpg->acl_node_mutex);
 		return ERR_PTR(-EEXIST);
 	}
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 
 	if (!se_nacl) {
 		pr_err("struct se_node_acl pointer is NULL\n");
@@ -425,10 +425,10 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 		return ERR_PTR(-EINVAL);
 	}
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	list_add_tail(&acl->acl_list, &tpg->acl_node_list);
 	tpg->num_node_acls++;
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 
 done:
 	pr_debug("%s_TPG[%hu] - Added ACL with TCQ Depth: %d for %s"
@@ -454,13 +454,13 @@ int core_tpg_del_initiator_node_acl(
 	unsigned long flags;
 	int rc;
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	if (acl->dynamic_node_acl) {
 		acl->dynamic_node_acl = 0;
 	}
 	list_del(&acl->acl_list);
 	tpg->num_node_acls--;
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 
 	spin_lock_irqsave(&acl->nacl_sess_lock, flags);
 	acl->acl_stop = 1;
@@ -519,21 +519,21 @@ int core_tpg_set_initiator_node_queue_depth(
 	unsigned long flags;
 	int dynamic_acl = 0;
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	acl = __core_tpg_get_initiator_node_acl(tpg, initiatorname);
 	if (!acl) {
 		pr_err("Access Control List entry for %s Initiator"
 			" Node %s does not exists for TPG %hu, ignoring"
 			" request.\n", tpg->se_tpg_tfo->get_fabric_name(),
 			initiatorname, tpg->se_tpg_tfo->tpg_get_tag(tpg));
-		spin_unlock_irq(&tpg->acl_node_lock);
+		mutex_unlock(&tpg->acl_node_mutex);
 		return -ENODEV;
 	}
 	if (acl->dynamic_node_acl) {
 		acl->dynamic_node_acl = 0;
 		dynamic_acl = 1;
 	}
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 
 	spin_lock_irqsave(&tpg->session_lock, flags);
 	list_for_each_entry(sess, &tpg->tpg_sess_list, sess_list) {
@@ -549,10 +549,10 @@ int core_tpg_set_initiator_node_queue_depth(
 				tpg->se_tpg_tfo->get_fabric_name(), initiatorname);
 			spin_unlock_irqrestore(&tpg->session_lock, flags);
 
-			spin_lock_irq(&tpg->acl_node_lock);
+			mutex_lock(&tpg->acl_node_mutex);
 			if (dynamic_acl)
 				acl->dynamic_node_acl = 1;
-			spin_unlock_irq(&tpg->acl_node_lock);
+			mutex_unlock(&tpg->acl_node_mutex);
 			return -EEXIST;
 		}
 		/*
@@ -587,10 +587,10 @@ int core_tpg_set_initiator_node_queue_depth(
 		if (init_sess)
 			tpg->se_tpg_tfo->close_session(init_sess);
 
-		spin_lock_irq(&tpg->acl_node_lock);
+		mutex_lock(&tpg->acl_node_mutex);
 		if (dynamic_acl)
 			acl->dynamic_node_acl = 1;
-		spin_unlock_irq(&tpg->acl_node_lock);
+		mutex_unlock(&tpg->acl_node_mutex);
 		return -EINVAL;
 	}
 	spin_unlock_irqrestore(&tpg->session_lock, flags);
@@ -606,10 +606,10 @@ int core_tpg_set_initiator_node_queue_depth(
 		initiatorname, tpg->se_tpg_tfo->get_fabric_name(),
 		tpg->se_tpg_tfo->tpg_get_tag(tpg));
 
-	spin_lock_irq(&tpg->acl_node_lock);
+	mutex_lock(&tpg->acl_node_mutex);
 	if (dynamic_acl)
 		acl->dynamic_node_acl = 1;
-	spin_unlock_irq(&tpg->acl_node_lock);
+	mutex_unlock(&tpg->acl_node_mutex);
 
 	return 0;
 }
@@ -708,9 +708,9 @@ int core_tpg_register(
 	INIT_LIST_HEAD(&se_tpg->acl_node_list);
 	INIT_LIST_HEAD(&se_tpg->se_tpg_node);
 	INIT_LIST_HEAD(&se_tpg->tpg_sess_list);
-	spin_lock_init(&se_tpg->acl_node_lock);
 	spin_lock_init(&se_tpg->session_lock);
 	mutex_init(&se_tpg->tpg_lun_mutex);
+	mutex_init(&se_tpg->acl_node_mutex);
 
 	if (se_tpg->se_tpg_type == TRANSPORT_TPG_TYPE_NORMAL) {
 		if (core_tpg_setup_virtual_lun0(se_tpg) < 0) {
@@ -751,25 +751,26 @@ int core_tpg_deregister(struct se_portal_group *se_tpg)
 
 	while (atomic_read(&se_tpg->tpg_pr_ref_count) != 0)
 		cpu_relax();
+
 	/*
 	 * Release any remaining demo-mode generated se_node_acl that have
 	 * not been released because of TFO->tpg_check_demo_mode_cache() == 1
 	 * in transport_deregister_session().
 	 */
-	spin_lock_irq(&se_tpg->acl_node_lock);
+	mutex_lock(&se_tpg->acl_node_mutex);
 	list_for_each_entry_safe(nacl, nacl_tmp, &se_tpg->acl_node_list,
 			acl_list) {
 		list_del(&nacl->acl_list);
 		se_tpg->num_node_acls--;
-		spin_unlock_irq(&se_tpg->acl_node_lock);
+		mutex_unlock(&se_tpg->acl_node_mutex);
 
 		core_tpg_wait_for_nacl_pr_ref(nacl);
 		core_free_device_list_for_node(nacl, se_tpg);
 		se_tpg->se_tpg_tfo->tpg_release_fabric_acl(se_tpg, nacl);
 
-		spin_lock_irq(&se_tpg->acl_node_lock);
+		mutex_lock(&se_tpg->acl_node_mutex);
 	}
-	spin_unlock_irq(&se_tpg->acl_node_lock);
+	mutex_unlock(&se_tpg->acl_node_mutex);
 
 	if (se_tpg->se_tpg_type == TRANSPORT_TPG_TYPE_NORMAL)
 		core_tpg_remove_lun(se_tpg, &se_tpg->tpg_virt_lun0);
