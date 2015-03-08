@@ -1267,27 +1267,26 @@ struct se_lun *core_get_lun_from_tpg(struct se_portal_group *tpg, u32 unpacked_l
 {
 	struct se_lun *lun;
 
-	spin_lock(&tpg->tpg_lun_lock);
 	if (unpacked_lun > (TRANSPORT_MAX_LUNS_PER_TPG-1)) {
 		pr_err("%s LUN: %u exceeds TRANSPORT_MAX_LUNS"
 			"_PER_TPG-1: %u for Target Portal Group: %hu\n",
 			tpg->se_tpg_tfo->get_fabric_name(), unpacked_lun,
 			TRANSPORT_MAX_LUNS_PER_TPG-1,
 			tpg->se_tpg_tfo->tpg_get_tag(tpg));
-		spin_unlock(&tpg->tpg_lun_lock);
 		return NULL;
 	}
-	lun = tpg->tpg_lun_list[unpacked_lun];
 
+	mutex_lock(&tpg->tpg_lun_mutex);
+	lun = tpg->tpg_lun_list[unpacked_lun];
 	if (lun->lun_status != TRANSPORT_LUN_STATUS_FREE) {
 		pr_err("%s Logical Unit Number: %u is not free on"
 			" Target Portal Group: %hu, ignoring request.\n",
 			tpg->se_tpg_tfo->get_fabric_name(), unpacked_lun,
 			tpg->se_tpg_tfo->tpg_get_tag(tpg));
-		spin_unlock(&tpg->tpg_lun_lock);
+		mutex_unlock(&tpg->tpg_lun_mutex);
 		return NULL;
 	}
-	spin_unlock(&tpg->tpg_lun_lock);
+	mutex_unlock(&tpg->tpg_lun_mutex);
 
 	return lun;
 }
@@ -1300,27 +1299,26 @@ static struct se_lun *core_dev_get_lun(struct se_portal_group *tpg, u32 unpacked
 {
 	struct se_lun *lun;
 
-	spin_lock(&tpg->tpg_lun_lock);
 	if (unpacked_lun > (TRANSPORT_MAX_LUNS_PER_TPG-1)) {
 		pr_err("%s LUN: %u exceeds TRANSPORT_MAX_LUNS_PER"
 			"_TPG-1: %u for Target Portal Group: %hu\n",
 			tpg->se_tpg_tfo->get_fabric_name(), unpacked_lun,
 			TRANSPORT_MAX_LUNS_PER_TPG-1,
 			tpg->se_tpg_tfo->tpg_get_tag(tpg));
-		spin_unlock(&tpg->tpg_lun_lock);
 		return NULL;
 	}
-	lun = tpg->tpg_lun_list[unpacked_lun];
 
+	mutex_lock(&tpg->tpg_lun_mutex);
+	lun = tpg->tpg_lun_list[unpacked_lun];
 	if (lun->lun_status != TRANSPORT_LUN_STATUS_ACTIVE) {
 		pr_err("%s Logical Unit Number: %u is not active on"
 			" Target Portal Group: %hu, ignoring request.\n",
 			tpg->se_tpg_tfo->get_fabric_name(), unpacked_lun,
 			tpg->se_tpg_tfo->tpg_get_tag(tpg));
-		spin_unlock(&tpg->tpg_lun_lock);
+		mutex_unlock(&tpg->tpg_lun_mutex);
 		return NULL;
 	}
-	spin_unlock(&tpg->tpg_lun_lock);
+	mutex_unlock(&tpg->tpg_lun_mutex);
 
 	return lun;
 }

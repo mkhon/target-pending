@@ -883,7 +883,7 @@ struct se_portal_group {
 	spinlock_t		acl_node_lock;
 	/* Spinlock for adding/removing sessions */
 	spinlock_t		session_lock;
-	spinlock_t		tpg_lun_lock;
+	struct mutex		tpg_lun_mutex;
 	/* Pointer to $FABRIC_MOD portal group */
 	void			*se_tpg_fabric_ptr;
 	struct list_head	se_tpg_node;
