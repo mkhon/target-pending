@@ -304,7 +304,7 @@ void core_update_device_list_access(
 {
 	struct se_dev_entry *deve;
 
-	spin_lock_irq(&nacl->lun_entry_lock);
+	mutex_lock(&nacl->lun_entry_mutex);
 	deve = rcu_dereference(nacl->lun_entry_hlist[mapped_lun]);
 	if (lun_access & TRANSPORT_LUNFLAGS_READ_WRITE) {
 		deve->lun_flags &= ~TRANSPORT_LUNFLAGS_READ_ONLY;
@@ -313,7 +313,7 @@ void core_update_device_list_access(
 		deve->lun_flags &= ~TRANSPORT_LUNFLAGS_READ_WRITE;
 		deve->lun_flags |= TRANSPORT_LUNFLAGS_READ_ONLY;
 	}
-	spin_unlock_irq(&nacl->lun_entry_lock);
+	mutex_unlock(&nacl->lun_entry_mutex);
 
 	synchronize_rcu();
 }
@@ -345,7 +345,7 @@ int core_enable_device_list_for_node(
 	 * transition.  This transition must be for the same struct se_lun
 	 * + mapped_lun that was setup in demo mode..
 	 */
-	spin_lock_irq(&nacl->lun_entry_lock);
+	mutex_lock(&nacl->lun_entry_mutex);
 	deve = nacl->lun_entry_hlist[mapped_lun];
 	if (deve->lun_flags & TRANSPORT_LUNFLAGS_INITIATOR_ACCESS) {
 		BUG_ON(deve->se_lun_acl != NULL);
@@ -359,7 +359,7 @@ int core_enable_device_list_for_node(
 			deve->lun_flags |= TRANSPORT_LUNFLAGS_READ_ONLY;
 		}
 		rcu_assign_pointer(deve->se_lun_acl, lun_acl);
-		spin_unlock_irq(&nacl->lun_entry_lock);
+		mutex_unlock(&nacl->lun_entry_mutex);
 
 		synchronize_rcu();
 		return 0;
@@ -384,7 +384,7 @@ int core_enable_device_list_for_node(
 
 	rcu_assign_pointer(deve->se_lun, lun);
 	rcu_assign_pointer(deve->se_lun_acl, lun_acl);
-	spin_unlock_irq(&nacl->lun_entry_lock);
+	mutex_unlock(&nacl->lun_entry_mutex);
 
 	spin_lock_bh(&port->sep_alua_lock);
 	list_add_tail(&deve->alua_port_list, &port->sep_alua_list);
@@ -409,8 +409,8 @@ int core_disable_device_list_for_node(
 	struct se_port *port = lun->lun_sep;
 	struct se_dev_entry *deve;
 
-	rcu_read_lock();
-	deve = rcu_dereference(nacl->lun_entry_hlist[mapped_lun]);
+	mutex_lock(&nacl->lun_entry_mutex);
+	deve = (nacl->lun_entry_hlist[mapped_lun]);
 	/*
 	 * If the MappedLUN entry is being disabled, the entry in
 	 * port->sep_alua_list must be removed now before clearing the
@@ -430,7 +430,6 @@ int core_disable_device_list_for_node(
 	/*
 	 * Disable struct se_dev_entry LUN ACL mapping
 	 */
-	spin_lock_irq(&nacl->lun_entry_lock);
 	core_scsi3_ua_release_all(deve);
 	rcu_assign_pointer(deve->pr_reg, NULL);
 	rcu_assign_pointer(deve->se_lun, NULL);
@@ -438,8 +437,7 @@ int core_disable_device_list_for_node(
 	deve->lun_flags = 0;
 	deve->creation_time = 0;
 	deve->attach_count--;
-	spin_unlock_irq(&nacl->lun_entry_lock);
-	rcu_read_unlock();
+	mutex_unlock(&nacl->lun_entry_mutex);
 
 	/*
 	 * Wait for RCU read critical sections to complete after

@@ -1030,10 +1030,10 @@ static void __core_scsi3_add_registration(
 	__core_scsi3_dump_registration(tfo, dev, nacl, pr_reg, register_type);
 	spin_unlock(&pr_tmpl->registration_lock);
 
-	spin_lock(&nacl->lun_entry_lock);
+	mutex_lock(&nacl->lun_entry_mutex);
 	deve = nacl->lun_entry_hlist[pr_reg->pr_res_mapped_lun];
 	rcu_assign_pointer(deve->pr_reg, pr_reg);
-	spin_unlock(&nacl->lun_entry_lock);
+	mutex_unlock(&nacl->lun_entry_mutex);
 	/*
 	 * Wait for read path critical RCU in core_scsi3_pr_seq_non_holder()
 	 * conditional checks for deve->pr_reg pointer access complete.
@@ -1065,10 +1065,10 @@ static void __core_scsi3_add_registration(
 					       register_type);
 		spin_unlock(&pr_tmpl->registration_lock);
 
-		spin_lock(&nacl->lun_entry_lock);
+		mutex_lock(&nacl->lun_entry_mutex);
 		deve = nacl_tmp->lun_entry_hlist[pr_reg_tmp->pr_res_mapped_lun];
 		rcu_assign_pointer(deve->pr_reg, pr_reg_tmp);
-		spin_unlock(&nacl->lun_entry_lock);
+		mutex_unlock(&nacl->lun_entry_mutex);
 		/*
 		 * Wait for read path critical RCU in core_scsi3_pr_seq_non_holder()
 		 * conditional checks for deve->pr_reg pointer access complete.
@@ -1280,10 +1280,10 @@ static void __core_scsi3_free_registration(
 		cpu_relax();
 	}
 
-	spin_lock(&nacl->lun_entry_lock);
+	mutex_lock(&nacl->lun_entry_mutex);
 	deve = nacl->lun_entry_hlist[pr_reg->pr_res_mapped_lun];
 	rcu_assign_pointer(deve->pr_reg, NULL);
-	spin_unlock(&nacl->lun_entry_lock);
+	mutex_unlock(&nacl->lun_entry_mutex);
 	/*
 	 * Wait for read path critical RCU in core_scsi3_pr_seq_non_holder()
 	 * conditional checks for deve->pr_reg pointer access complete.

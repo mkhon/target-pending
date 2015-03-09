@@ -275,9 +275,8 @@ struct se_node_acl *core_tpg_check_initiator_node_acl(
 	INIT_LIST_HEAD(&acl->acl_sess_list);
 	kref_init(&acl->acl_kref);
 	init_completion(&acl->acl_free_comp);
-	spin_lock_init(&acl->device_list_lock);
 	spin_lock_init(&acl->nacl_sess_lock);
-	spin_lock_init(&acl->lun_entry_lock);
+	mutex_init(&acl->lun_entry_mutex);
 	atomic_set(&acl->acl_pr_ref_count, 0);
 	acl->queue_depth = tpg->se_tpg_tfo->tpg_get_default_depth(tpg);
 	snprintf(acl->initiatorname, TRANSPORT_IQN_LEN, "%s", initiatorname);
@@ -331,7 +330,7 @@ void core_tpg_clear_object_luns(struct se_portal_group *tpg)
 	int i;
 	struct se_lun *lun;
 
-	spin_lock(&tpg->tpg_lun_lock);
+	mutex_lock(&tpg->tpg_lun_mutex);
 	for (i = 0; i < TRANSPORT_MAX_LUNS_PER_TPG; i++) {
 		lun = tpg->tpg_lun_list[i];
 
@@ -339,11 +338,11 @@ void core_tpg_clear_object_luns(struct se_portal_group *tpg)
 		    (lun->lun_se_dev == NULL))
 			continue;
 
-		spin_unlock(&tpg->tpg_lun_lock);
+		mutex_unlock(&tpg->tpg_lun_mutex);
 		core_dev_del_lun(tpg, lun);
-		spin_lock(&tpg->tpg_lun_lock);
+		mutex_lock(&tpg->tpg_lun_mutex);
 	}
-	spin_unlock(&tpg->tpg_lun_lock);
+	mutex_unlock(&tpg->tpg_lun_mutex);
 }
 EXPORT_SYMBOL(core_tpg_clear_object_luns);
 
@@ -403,9 +402,8 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 	INIT_LIST_HEAD(&acl->acl_sess_list);
 	kref_init(&acl->acl_kref);
 	init_completion(&acl->acl_free_comp);
-	spin_lock_init(&acl->device_list_lock);
 	spin_lock_init(&acl->nacl_sess_lock);
-	spin_lock_init(&acl->lun_entry_lock);
+	mutex_init(&acl->lun_entry_mutex);
 	atomic_set(&acl->acl_pr_ref_count, 0);
 	acl->queue_depth = queue_depth;
 	snprintf(acl->initiatorname, TRANSPORT_IQN_LEN, "%s", initiatorname);
