@@ -78,7 +78,7 @@ static void target_clear_initiator_node_from_tpg(
 		mapped_lun = deve->mapped_lun;
 		rcu_read_unlock();
 
-		core_disable_device_list_for_node(lun, NULL, mapped_lun,
+		target_disable_device_list_for_node(lun, NULL, mapped_lun,
 					TRANSPORT_LUNFLAGS_NO_ACCESS, nacl, tpg);
 	}
 }
@@ -119,11 +119,11 @@ struct se_node_acl *target_get_initiator_node_acl(
 }
 EXPORT_SYMBOL(target_get_initiator_node_acl);
 
-/*	core_tpg_add_node_to_devs():
+/*	target_add_node_to_devs():
  *
  *
  */
-void core_tpg_add_node_to_devs(
+void target_add_node_to_devs(
 	struct se_node_acl *acl,
 	struct se_portal_group *tpg)
 {
@@ -163,8 +163,8 @@ void core_tpg_add_node_to_devs(
 			(lun_access == TRANSPORT_LUNFLAGS_READ_WRITE) ?
 			"READ-WRITE" : "READ-ONLY");
 
-		core_enable_device_list_for_node(lun, NULL, lun->unpacked_lun,
-						 lun_access, acl, tpg);
+		target_enable_device_list_for_node(lun, NULL, lun->unpacked_lun,
+						   lun_access, acl, tpg);
 		/*
 		 * Check to see if there are any existing persistent reservation
 		 * APTPL pre-registrations that need to be enabled for this dynamic
@@ -222,11 +222,11 @@ static void *array_zalloc(int n, size_t size, gfp_t flags)
 	return a;
 }
 
-/*      core_create_device_list_for_node():
+/*      target_create_device_list_for_node():
  *
  *
  */
-static int core_create_device_list_for_node(struct se_node_acl *nacl)
+static int target_create_device_list_for_node(struct se_node_acl *nacl)
 {
 	struct se_dev_entry *deve;
 	int i;
@@ -286,13 +286,13 @@ struct se_node_acl *target_check_initiator_node_acl(
 
 	tpg->se_tpg_tfo->set_default_node_attributes(acl);
 
-	if (core_create_device_list_for_node(acl) < 0) {
+	if (target_create_device_list_for_node(acl) < 0) {
 		tpg->se_tpg_tfo->tpg_release_fabric_acl(tpg, acl);
 		return NULL;
 	}
 
 	if (core_set_queue_depth_for_node(tpg, acl) < 0) {
-		core_free_device_list_for_node(acl, tpg);
+		target_free_device_list_for_node(acl, tpg);
 		tpg->se_tpg_tfo->tpg_release_fabric_acl(tpg, acl);
 		return NULL;
 	}
@@ -303,7 +303,7 @@ struct se_node_acl *target_check_initiator_node_acl(
 	 */
 	if ((tpg->se_tpg_tfo->tpg_check_demo_mode_login_only == NULL) ||
 	    (tpg->se_tpg_tfo->tpg_check_demo_mode_login_only(tpg) != 1))
-		core_tpg_add_node_to_devs(acl, tpg);
+		target_add_node_to_devs(acl, tpg);
 
 	mutex_lock(&tpg->acl_node_mutex);
 	list_add_tail(&acl->acl_list, &tpg->acl_node_list);
@@ -391,13 +391,13 @@ struct se_node_acl *target_add_initiator_node_acl(
 
 	tpg->se_tpg_tfo->set_default_node_attributes(acl);
 
-	if (core_create_device_list_for_node(acl) < 0) {
+	if (target_create_device_list_for_node(acl) < 0) {
 		tpg->se_tpg_tfo->tpg_release_fabric_acl(tpg, acl);
 		return ERR_PTR(-ENOMEM);
 	}
 
 	if (core_set_queue_depth_for_node(tpg, acl) < 0) {
-		core_free_device_list_for_node(acl, tpg);
+		target_free_device_list_for_node(acl, tpg);
 		tpg->se_tpg_tfo->tpg_release_fabric_acl(tpg, acl);
 		return ERR_PTR(-EINVAL);
 	}
@@ -470,7 +470,7 @@ int target_del_initiator_node_acl(
 
 	core_tpg_wait_for_nacl_pr_ref(acl);
 	target_clear_initiator_node_from_tpg(acl, tpg);
-	core_free_device_list_for_node(acl, tpg);
+	target_free_device_list_for_node(acl, tpg);
 
 	pr_debug("%s_TPG[%hu] - Deleted ACL with TCQ Depth: %d for %s"
 		" Initiator Node: %s\n", tpg->se_tpg_tfo->get_fabric_name(),
@@ -739,7 +739,7 @@ int target_deregister_tpg(struct se_portal_group *se_tpg)
 		se_tpg->num_node_acls--;
 
 		core_tpg_wait_for_nacl_pr_ref(nacl);
-		core_free_device_list_for_node(nacl, se_tpg);
+		target_free_device_list_for_node(nacl, se_tpg);
 		se_tpg->se_tpg_tfo->tpg_release_fabric_acl(se_tpg, nacl);
 	}
 

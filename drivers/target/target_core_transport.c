@@ -505,7 +505,7 @@ void transport_deregister_session(struct se_session *se_sess)
 
 	if (drop_nacl) {
 		core_tpg_wait_for_nacl_pr_ref(se_nacl);
-		core_free_device_list_for_node(se_nacl, se_tpg);
+		target_free_device_list_for_node(se_nacl, se_tpg);
 		se_tfo->tpg_release_fabric_acl(se_tpg, se_nacl);
 		comp_nacl = false;
 	}

@@ -207,7 +207,7 @@ EXPORT_SYMBOL(target_lookup_tmr_lun);
  * and core_scsi3_decode_spec_i_port(), and will increment &deve->pr_ref_count
  * when a matching rtpi is found.
  */
-struct se_dev_entry *core_get_se_deve_from_rtpi(
+struct se_dev_entry *target_get_deve_from_rtpi(
 	struct se_node_acl *nacl,
 	u16 rtpi)
 {
@@ -257,7 +257,7 @@ struct se_dev_entry *core_get_se_deve_from_rtpi(
 	return NULL;
 }
 
-int core_free_device_list_for_node(
+int target_free_device_list_for_node(
 	struct se_node_acl *nacl,
 	struct se_portal_group *tpg)
 {
@@ -287,7 +287,7 @@ int core_free_device_list_for_node(
 		mapped_lun = deve->mapped_lun;
 		rcu_read_unlock();
 
-		core_disable_device_list_for_node(lun, NULL, mapped_lun,
+		target_disable_device_list_for_node(lun, NULL, mapped_lun,
 					TRANSPORT_LUNFLAGS_NO_ACCESS, nacl, tpg);
 	}
 
@@ -325,11 +325,11 @@ static void target_pr_ref_release(struct percpu_ref *ref)
 	complete(&deve->pr_comp);
 }
 
-/*      core_enable_device_list_for_node():
+/*      target_enable_device_list_for_node():
  *
  *
  */
-int core_enable_device_list_for_node(
+int target_enable_device_list_for_node(
 	struct se_lun *lun,
 	struct se_lun_acl *lun_acl,
 	u32 mapped_lun,
@@ -394,11 +394,11 @@ int core_enable_device_list_for_node(
 	return 0;
 }
 
-/*      core_disable_device_list_for_node():
+/*      target_disable_device_list_for_node():
  *
  *
  */
-int core_disable_device_list_for_node(
+int target_disable_device_list_for_node(
 	struct se_lun *lun,
 	struct se_lun_acl *lun_acl,
 	u32 mapped_lun,
@@ -479,7 +479,7 @@ void target_clear_lun_from_tpg(struct se_lun *lun, struct se_portal_group *tpg)
 			mapped_lun = deve->mapped_lun;
 			rcu_read_unlock();
 
-			core_disable_device_list_for_node(lun, NULL, mapped_lun,
+			target_disable_device_list_for_node(lun, NULL, mapped_lun,
 					TRANSPORT_LUNFLAGS_NO_ACCESS, nacl, tpg);
 		}
 	}
@@ -1232,7 +1232,7 @@ struct se_lun *core_dev_add_lun(
 			if (acl->dynamic_node_acl &&
 			    (!tpg->se_tpg_tfo->tpg_check_demo_mode_login_only ||
 			     !tpg->se_tpg_tfo->tpg_check_demo_mode_login_only(tpg))) {
-				core_tpg_add_node_to_devs(acl, tpg);
+				target_add_node_to_devs(acl, tpg);
 			}
 		}
 		mutex_unlock(&tpg->acl_node_mutex);
@@ -1374,7 +1374,7 @@ int core_dev_add_initiator_node_lun_acl(
 
 	lacl->se_lun = lun;
 
-	if (core_enable_device_list_for_node(lun, lacl, lacl->mapped_lun,
+	if (target_enable_device_list_for_node(lun, lacl, lacl->mapped_lun,
 			lun_access, nacl, tpg) < 0)
 		return -EINVAL;
 
@@ -1407,7 +1407,7 @@ int core_dev_del_initiator_node_lun_acl(
 	if (!nacl)
 		return -EINVAL;
 
-	core_disable_device_list_for_node(lun, NULL, lacl->mapped_lun,
+	target_disable_device_list_for_node(lun, NULL, lacl->mapped_lun,
 		TRANSPORT_LUNFLAGS_NO_ACCESS, nacl, tpg);
 
 	lacl->se_lun = NULL;

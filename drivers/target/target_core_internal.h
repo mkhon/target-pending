@@ -5,13 +5,13 @@
 extern struct t10_alua_lu_gp *default_lu_gp;
 
 /* target_core_device.c */
-struct se_dev_entry *core_get_se_deve_from_rtpi(struct se_node_acl *, u16);
-int	core_free_device_list_for_node(struct se_node_acl *,
+struct se_dev_entry *target_get_deve_from_rtpi(struct se_node_acl *, u16);
+int	target_free_device_list_for_node(struct se_node_acl *,
 		struct se_portal_group *);
 void	core_update_device_list_access(u32, u32, struct se_node_acl *);
-int	core_enable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
-		u32, u32, struct se_node_acl *, struct se_portal_group *);
-int	core_disable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
+int	target_enable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
+			u32, u32, struct se_node_acl *, struct se_portal_group *);
+int	target_disable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
 		u32, u32, struct se_node_acl *, struct se_portal_group *);
 void	target_clear_lun_from_tpg(struct se_lun *, struct se_portal_group *);
 int	core_dev_export(struct se_device *, struct se_portal_group *,
@@ -50,7 +50,7 @@ extern struct se_device *g_lun0_dev;
 
 struct se_node_acl *__target_get_initiator_node_acl(struct se_portal_group *tpg,
 		const char *);
-void	core_tpg_add_node_to_devs(struct se_node_acl *, struct se_portal_group *);
+void	target_add_node_to_devs(struct se_node_acl *, struct se_portal_group *);
 void	core_tpg_wait_for_nacl_pr_ref(struct se_node_acl *);
 struct se_lun *core_tpg_alloc_lun(struct se_portal_group *, u32);
 int	target_add_lun(struct se_portal_group *, struct se_lun *,

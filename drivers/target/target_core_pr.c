@@ -1669,8 +1669,8 @@ core_scsi3_decode_spec_i_port(
 		 * RELATIVE TARGET PORT IDENTIFIER on the receiving I_T Nexus
 		 * Target Port.
 		 */
-		dest_se_deve = core_get_se_deve_from_rtpi(dest_node_acl,
-					dest_rtpi);
+		dest_se_deve = target_get_deve_from_rtpi(dest_node_acl,
+							 dest_rtpi);
 		if (!dest_se_deve) {
 			pr_err("Unable to locate %s dest_se_deve"
 				" from destination RTPI: %hu\n",
@@ -3374,7 +3374,7 @@ after_iport_check:
 	 * Locate the struct se_dev_entry pointer for the matching RELATIVE TARGET
 	 * PORT IDENTIFIER.
 	 */
-	dest_se_deve = core_get_se_deve_from_rtpi(dest_node_acl, rtpi);
+	dest_se_deve = target_get_deve_from_rtpi(dest_node_acl, rtpi);
 	if (!dest_se_deve) {
 		pr_err("Unable to locate %s dest_se_deve from RTPI:"
 			" %hu\n",  dest_tf_ops->get_fabric_name(), rtpi);
