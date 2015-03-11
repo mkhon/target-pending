@@ -48,7 +48,7 @@ int	core_tmr_lun_reset(struct se_device *, struct se_tmr_req *,
 /* target_core_tpg.c */
 extern struct se_device *g_lun0_dev;
 
-struct se_node_acl *__core_tpg_get_initiator_node_acl(struct se_portal_group *tpg,
+struct se_node_acl *__target_get_initiator_node_acl(struct se_portal_group *tpg,
 		const char *);
 void	core_tpg_add_node_to_devs(struct se_node_acl *, struct se_portal_group *);
 void	core_tpg_wait_for_nacl_pr_ref(struct se_node_acl *);

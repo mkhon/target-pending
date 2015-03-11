@@ -221,7 +221,7 @@ static struct sbp_session *sbp_session_create(
 
 	snprintf(guid_str, sizeof(guid_str), "%016llx", guid);
 
-	se_nacl = core_tpg_check_initiator_node_acl(&tpg->se_tpg, guid_str);
+	se_nacl = target_check_initiator_node_acl(&tpg->se_tpg, guid_str);
 	if (!se_nacl) {
 		pr_warn("Node ACL not found for %s\n", guid_str);
 
@@ -2115,11 +2115,11 @@ static struct se_node_acl *sbp_make_nodeacl(
 		return ERR_PTR(-ENOMEM);
 
 	/*
-	 * se_nacl_new may be released by core_tpg_add_initiator_node_acl()
+	 * se_nacl_new may be released by target_add_initiator_node_acl()
 	 * when converting a NodeACL from demo mode -> explict
 	 */
-	se_nacl = core_tpg_add_initiator_node_acl(se_tpg, se_nacl_new,
-			name, nexus_depth);
+	se_nacl = target_add_initiator_node_acl(se_tpg, se_nacl_new,
+						name, nexus_depth);
 	if (IS_ERR(se_nacl)) {
 		sbp_release_fabric_acl(se_tpg, se_nacl_new);
 		return se_nacl;
@@ -2137,7 +2137,7 @@ static void sbp_drop_nodeacl(struct se_node_acl *se_acl)
 	struct sbp_nacl *nacl =
 		container_of(se_acl, struct sbp_nacl, se_node_acl);
 
-	core_tpg_del_initiator_node_acl(se_acl->se_tpg, se_acl, 1);
+	target_del_initiator_node_acl(se_acl->se_tpg, se_acl, 1);
 	kfree(nacl);
 }
 

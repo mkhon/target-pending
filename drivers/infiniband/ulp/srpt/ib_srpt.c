@@ -3626,11 +3626,11 @@ static struct se_node_acl *srpt_make_nodeacl(struct se_portal_group *tpg,
 		goto err;
 	}
 	/*
-	 * nacl_new may be released by core_tpg_add_initiator_node_acl()
+	 * nacl_new may be released by target_add_initiator_node_acl()
 	 * when converting a node ACL from demo mode to explict
 	 */
-	se_nacl = core_tpg_add_initiator_node_acl(tpg, se_nacl_new, name,
-						  nexus_depth);
+	se_nacl = target_add_initiator_node_acl(tpg, se_nacl_new, name,
+						nexus_depth);
 	if (IS_ERR(se_nacl)) {
 		ret = PTR_ERR(se_nacl);
 		goto err;
@@ -3665,7 +3665,7 @@ static void srpt_drop_nodeacl(struct se_node_acl *se_nacl)
 	spin_lock_irq(&sport->port_acl_lock);
 	list_del(&nacl->list);
 	spin_unlock_irq(&sport->port_acl_lock);
-	core_tpg_del_initiator_node_acl(&sport->port_tpg_1, se_nacl, 1);
+	target_del_initiator_node_acl(&sport->port_tpg_1, se_nacl, 1);
 	srpt_release_fabric_acl(NULL, se_nacl);
 }
 

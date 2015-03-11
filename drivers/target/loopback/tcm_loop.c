@@ -991,8 +991,8 @@ static int tcm_loop_make_nexus(
 	 * struct se_node_acl for the tcm_loop struct se_portal_group with the SCSI
 	 * Initiator port name of the passed configfs group 'name'.
 	 */
-	tl_nexus->se_sess->se_node_acl = core_tpg_check_initiator_node_acl(
-				se_tpg, (unsigned char *)name);
+	tl_nexus->se_sess->se_node_acl = target_check_initiator_node_acl(
+					se_tpg, (unsigned char *)name);
 	if (!tl_nexus->se_sess->se_node_acl) {
 		transport_free_session(tl_nexus->se_sess);
 		goto out;

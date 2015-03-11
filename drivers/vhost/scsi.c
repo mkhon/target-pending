@@ -1834,11 +1834,11 @@ vhost_scsi_make_nodeacl(struct se_portal_group *se_tpg,
 
 	nexus_depth = 1;
 	/*
-	 * se_nacl_new may be released by core_tpg_add_initiator_node_acl()
+	 * se_nacl_new may be released by target_add_initiator_node_acl()
 	 * when converting a NodeACL from demo mode -> explict
 	 */
-	se_nacl = core_tpg_add_initiator_node_acl(se_tpg, se_nacl_new,
-				name, nexus_depth);
+	se_nacl = target_add_initiator_node_acl(se_tpg, se_nacl_new,
+						name, nexus_depth);
 	if (IS_ERR(se_nacl)) {
 		vhost_scsi_release_fabric_acl(se_tpg, se_nacl_new);
 		return se_nacl;
@@ -1856,7 +1856,7 @@ static void vhost_scsi_drop_nodeacl(struct se_node_acl *se_acl)
 {
 	struct vhost_scsi_nacl *nacl = container_of(se_acl,
 				struct vhost_scsi_nacl, se_node_acl);
-	core_tpg_del_initiator_node_acl(se_acl->se_tpg, se_acl, 1);
+	target_del_initiator_node_acl(se_acl->se_tpg, se_acl, 1);
 	kfree(nacl);
 }
 
@@ -1947,11 +1947,11 @@ static int vhost_scsi_make_nexus(struct vhost_scsi_tpg *tpg,
 	 * struct se_node_acl for the vhost_scsi struct se_portal_group with
 	 * the SCSI Initiator port name of the passed configfs group 'name'.
 	 */
-	tv_nexus->tvn_se_sess->se_node_acl = core_tpg_check_initiator_node_acl(
+	tv_nexus->tvn_se_sess->se_node_acl = target_check_initiator_node_acl(
 				se_tpg, (unsigned char *)name);
 	if (!tv_nexus->tvn_se_sess->se_node_acl) {
 		mutex_unlock(&tpg->tv_tpg_mutex);
-		pr_debug("core_tpg_check_initiator_node_acl() failed"
+		pr_debug("target_check_initiator_node_acl() failed"
 				" for %s\n", name);
 		goto out;
 	}

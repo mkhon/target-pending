@@ -220,8 +220,8 @@ static struct se_node_acl *ft_add_acl(
 	acl->node_auth.port_name = wwpn;
 
 	q_depth = 32;		/* XXX bogus default - get from tpg? */
-	return core_tpg_add_initiator_node_acl(&tpg->se_tpg,
-				&acl->se_node_acl, name, q_depth);
+	return target_add_initiator_node_acl(&tpg->se_tpg,
+					     &acl->se_node_acl, name, q_depth);
 }
 
 static void ft_del_acl(struct se_node_acl *se_acl)
@@ -238,7 +238,7 @@ static void ft_del_acl(struct se_node_acl *se_acl)
 	pr_debug("del acl %p se_acl %p tpg %p se_tpg %p\n",
 		    acl, se_acl, tpg, &tpg->se_tpg);
 
-	core_tpg_del_initiator_node_acl(&tpg->se_tpg, se_acl, 1);
+	target_del_initiator_node_acl(&tpg->se_tpg, se_acl, 1);
 	kfree(acl);
 }
 

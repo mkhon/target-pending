@@ -1509,11 +1509,11 @@ static struct se_node_acl *usbg_make_nodeacl(
 
 	nexus_depth = 1;
 	/*
-	 * se_nacl_new may be released by core_tpg_add_initiator_node_acl()
+	 * se_nacl_new may be released by target_add_initiator_node_acl()
 	 * when converting a NodeACL from demo mode -> explict
 	 */
-	se_nacl = core_tpg_add_initiator_node_acl(se_tpg, se_nacl_new,
-				name, nexus_depth);
+	se_nacl = target_add_initiator_node_acl(se_tpg, se_nacl_new,
+						name, nexus_depth);
 	if (IS_ERR(se_nacl)) {
 		usbg_release_fabric_acl(se_tpg, se_nacl_new);
 		return se_nacl;
@@ -1531,7 +1531,7 @@ static void usbg_drop_nodeacl(struct se_node_acl *se_acl)
 {
 	struct usbg_nacl *nacl = container_of(se_acl,
 				struct usbg_nacl, se_node_acl);
-	core_tpg_del_initiator_node_acl(se_acl->se_tpg, se_acl, 1);
+	target_del_initiator_node_acl(se_acl->se_tpg, se_acl, 1);
 	kfree(nacl);
 }
 
@@ -1732,10 +1732,10 @@ static int tcm_usbg_make_nexus(struct usbg_tpg *tpg, char *name)
 	 * struct se_node_acl for the tcm_vhost struct se_portal_group with
 	 * the SCSI Initiator port name of the passed configfs group 'name'.
 	 */
-	tv_nexus->tvn_se_sess->se_node_acl = core_tpg_check_initiator_node_acl(
-			se_tpg, name);
+	tv_nexus->tvn_se_sess->se_node_acl = target_check_initiator_node_acl(
+							se_tpg, name);
 	if (!tv_nexus->tvn_se_sess->se_node_acl) {
-		pr_debug("core_tpg_check_initiator_node_acl() failed"
+		pr_debug("target_check_initiator_node_acl() failed"
 				" for %s\n", name);
 		goto err_session;
 	}

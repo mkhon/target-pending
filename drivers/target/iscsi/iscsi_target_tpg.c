@@ -598,7 +598,7 @@ int iscsit_tpg_set_initiator_node_queue_depth(
 	u32 queue_depth,
 	int force)
 {
-	return core_tpg_set_initiator_node_queue_depth(&tpg->tpg_se_tpg,
+	return target_set_initiator_node_queue_depth(&tpg->tpg_se_tpg,
 		initiatorname, queue_depth, force);
 }
 

@@ -47,11 +47,11 @@ extern struct se_device *g_lun0_dev;
 static DEFINE_SPINLOCK(tpg_lock);
 static LIST_HEAD(tpg_list);
 
-/*	core_clear_initiator_node_from_tpg():
+/*	target_clear_initiator_node_from_tpg():
  *
  *
  */
-static void core_clear_initiator_node_from_tpg(
+static void target_clear_initiator_node_from_tpg(
 	struct se_node_acl *nacl,
 	struct se_portal_group *tpg)
 {
@@ -83,11 +83,11 @@ static void core_clear_initiator_node_from_tpg(
 	}
 }
 
-/*	__core_tpg_get_initiator_node_acl():
+/*	__target_get_initiator_node_acl():
  *
  *	mutex_lock(&tpg->acl_node_mutex); must be held when calling
  */
-struct se_node_acl *__core_tpg_get_initiator_node_acl(
+struct se_node_acl *__target_get_initiator_node_acl(
 	struct se_portal_group *tpg,
 	const char *initiatorname)
 {
@@ -101,23 +101,23 @@ struct se_node_acl *__core_tpg_get_initiator_node_acl(
 	return NULL;
 }
 
-/*	core_tpg_get_initiator_node_acl():
+/*	target_get_initiator_node_acl():
  *
  *
  */
-struct se_node_acl *core_tpg_get_initiator_node_acl(
+struct se_node_acl *target_get_initiator_node_acl(
 	struct se_portal_group *tpg,
 	unsigned char *initiatorname)
 {
 	struct se_node_acl *acl;
 
 	mutex_lock(&tpg->acl_node_mutex);
-	acl = __core_tpg_get_initiator_node_acl(tpg, initiatorname);
+	acl = __target_get_initiator_node_acl(tpg, initiatorname);
 	mutex_unlock(&tpg->acl_node_mutex);
 
 	return acl;
 }
-EXPORT_SYMBOL(core_tpg_get_initiator_node_acl);
+EXPORT_SYMBOL(target_get_initiator_node_acl);
 
 /*	core_tpg_add_node_to_devs():
  *
@@ -250,17 +250,17 @@ static int core_create_device_list_for_node(struct se_node_acl *nacl)
 	return 0;
 }
 
-/*	core_tpg_check_initiator_node_acl()
+/*	target_check_initiator_node_acl()
  *
  *
  */
-struct se_node_acl *core_tpg_check_initiator_node_acl(
+struct se_node_acl *target_check_initiator_node_acl(
 	struct se_portal_group *tpg,
 	unsigned char *initiatorname)
 {
 	struct se_node_acl *acl;
 
-	acl = core_tpg_get_initiator_node_acl(tpg, initiatorname);
+	acl = target_get_initiator_node_acl(tpg, initiatorname);
 	if (acl)
 		return acl;
 
@@ -317,7 +317,7 @@ struct se_node_acl *core_tpg_check_initiator_node_acl(
 
 	return acl;
 }
-EXPORT_SYMBOL(core_tpg_check_initiator_node_acl);
+EXPORT_SYMBOL(target_check_initiator_node_acl);
 
 void core_tpg_wait_for_nacl_pr_ref(struct se_node_acl *nacl)
 {
@@ -325,11 +325,11 @@ void core_tpg_wait_for_nacl_pr_ref(struct se_node_acl *nacl)
 		cpu_relax();
 }
 
-/*	core_tpg_add_initiator_node_acl():
+/*	target_tadd_initiator_node_acl():
  *
  *
  */
-struct se_node_acl *core_tpg_add_initiator_node_acl(
+struct se_node_acl *target_add_initiator_node_acl(
 	struct se_portal_group *tpg,
 	struct se_node_acl *se_nacl,
 	const char *initiatorname,
@@ -338,7 +338,7 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 	struct se_node_acl *acl = NULL;
 
 	mutex_lock(&tpg->acl_node_mutex);
-	acl = __core_tpg_get_initiator_node_acl(tpg, initiatorname);
+	acl = __target_get_initiator_node_acl(tpg, initiatorname);
 	if (acl) {
 		if (acl->dynamic_node_acl) {
 			acl->dynamic_node_acl = 0;
@@ -415,13 +415,13 @@ done:
 
 	return acl;
 }
-EXPORT_SYMBOL(core_tpg_add_initiator_node_acl);
+EXPORT_SYMBOL(target_add_initiator_node_acl);
 
-/*	core_tpg_del_initiator_node_acl():
+/*	target_del_initiator_node_acl():
  *
  *
  */
-int core_tpg_del_initiator_node_acl(
+int target_del_initiator_node_acl(
 	struct se_portal_group *tpg,
 	struct se_node_acl *acl,
 	int force)
@@ -469,7 +469,7 @@ int core_tpg_del_initiator_node_acl(
 	wait_for_completion(&acl->acl_free_comp);
 
 	core_tpg_wait_for_nacl_pr_ref(acl);
-	core_clear_initiator_node_from_tpg(acl, tpg);
+	target_clear_initiator_node_from_tpg(acl, tpg);
 	core_free_device_list_for_node(acl, tpg);
 
 	pr_debug("%s_TPG[%hu] - Deleted ACL with TCQ Depth: %d for %s"
@@ -479,13 +479,13 @@ int core_tpg_del_initiator_node_acl(
 
 	return 0;
 }
-EXPORT_SYMBOL(core_tpg_del_initiator_node_acl);
+EXPORT_SYMBOL(target_del_initiator_node_acl);
 
-/*	core_tpg_set_initiator_node_queue_depth():
+/*	target_set_initiator_node_queue_depth():
  *
  *
  */
-int core_tpg_set_initiator_node_queue_depth(
+int target_set_initiator_node_queue_depth(
 	struct se_portal_group *tpg,
 	unsigned char *initiatorname,
 	u32 queue_depth,
@@ -497,7 +497,7 @@ int core_tpg_set_initiator_node_queue_depth(
 	int dynamic_acl = 0;
 
 	mutex_lock(&tpg->acl_node_mutex);
-	acl = __core_tpg_get_initiator_node_acl(tpg, initiatorname);
+	acl = __target_get_initiator_node_acl(tpg, initiatorname);
 	if (!acl) {
 		pr_err("Access Control List entry for %s Initiator"
 			" Node %s does not exists for TPG %hu, ignoring"
@@ -590,15 +590,15 @@ int core_tpg_set_initiator_node_queue_depth(
 
 	return 0;
 }
-EXPORT_SYMBOL(core_tpg_set_initiator_node_queue_depth);
+EXPORT_SYMBOL(target_set_initiator_node_queue_depth);
 
-/*	core_tpg_set_initiator_node_tag():
+/*	target_set_initiator_node_tag():
  *
  *	Initiator nodeacl tags are not used internally, but may be used by
  *	userspace to emulate aliases or groups.
  *	Returns length of newly-set tag or -EINVAL.
  */
-int core_tpg_set_initiator_node_tag(
+int target_set_initiator_node_tag(
 	struct se_portal_group *tpg,
 	struct se_node_acl *acl,
 	const char *new_tag)
@@ -613,7 +613,7 @@ int core_tpg_set_initiator_node_tag(
 
 	return snprintf(acl->acl_tag, MAX_ACL_TAG_SIZE, "%s", new_tag);
 }
-EXPORT_SYMBOL(core_tpg_set_initiator_node_tag);
+EXPORT_SYMBOL(target_set_initiator_node_tag);
 
 static void core_tpg_lun_ref_release(struct percpu_ref *ref)
 {

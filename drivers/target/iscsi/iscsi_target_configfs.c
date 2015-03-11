@@ -847,8 +847,7 @@ static ssize_t lio_target_nacl_store_tag(
 {
 	int ret;
 
-	ret = core_tpg_set_initiator_node_tag(se_nacl->se_tpg, se_nacl, page);
-
+	ret = target_set_initiator_node_tag(se_nacl->se_tpg, se_nacl, page);
 	if (ret < 0)
 		return ret;
 	return count;
@@ -895,11 +894,11 @@ static struct se_node_acl *lio_target_make_nodeacl(
 
 	cmdsn_depth = tpg->tpg_attrib.default_cmdsn_depth;
 	/*
-	 * se_nacl_new may be released by core_tpg_add_initiator_node_acl()
+	 * se_nacl_new may be released by target_add_initiator_node_acl()
 	 * when converting a NdoeACL from demo mode -> explict
 	 */
-	se_nacl = core_tpg_add_initiator_node_acl(se_tpg, se_nacl_new,
-				name, cmdsn_depth);
+	se_nacl = target_add_initiator_node_acl(se_tpg, se_nacl_new,
+						name, cmdsn_depth);
 	if (IS_ERR(se_nacl))
 		return se_nacl;
 
@@ -911,7 +910,7 @@ static struct se_node_acl *lio_target_make_nodeacl(
 	if (!stats_cg->default_groups) {
 		pr_err("Unable to allocate memory for"
 				" stats_cg->default_groups\n");
-		core_tpg_del_initiator_node_acl(se_tpg, se_nacl, 1);
+		target_del_initiator_node_acl(se_tpg, se_nacl, 1);
 		kfree(acl);
 		return ERR_PTR(-ENOMEM);
 	}
@@ -942,7 +941,7 @@ static void lio_target_drop_nodeacl(
 	}
 	kfree(stats_cg->default_groups);
 
-	core_tpg_del_initiator_node_acl(se_tpg, se_nacl, 1);
+	target_del_initiator_node_acl(se_tpg, se_nacl, 1);
 	kfree(acl);
 }
 
