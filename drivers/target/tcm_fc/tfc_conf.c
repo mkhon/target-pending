@@ -337,8 +337,8 @@ static struct se_portal_group *ft_add_tpg(
 		return NULL;
 	}
 
-	ret = core_tpg_register(&ft_configfs->tf_ops, wwn, &tpg->se_tpg,
-				tpg, TRANSPORT_TPG_TYPE_NORMAL);
+	ret = target_register_tpg(&ft_configfs->tf_ops, wwn, &tpg->se_tpg,
+				  tpg, TRANSPORT_TPG_TYPE_NORMAL);
 	if (ret < 0) {
 		destroy_workqueue(wq);
 		kfree(tpg);
@@ -374,7 +374,7 @@ static void ft_del_tpg(struct se_portal_group *se_tpg)
 	}
 	mutex_unlock(&ft_lport_lock);
 
-	core_tpg_deregister(se_tpg);
+	target_deregister_tpg(se_tpg);
 	kfree(tpg);
 }
 

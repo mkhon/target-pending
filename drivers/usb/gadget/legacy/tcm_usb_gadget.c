@@ -1572,9 +1572,9 @@ static struct se_portal_group *usbg_make_tpg(
 	tpg->tport = tport;
 	tpg->tport_tpgt = tpgt;
 
-	ret = core_tpg_register(&usbg_fabric_configfs->tf_ops, wwn,
-				&tpg->se_tpg, tpg,
-				TRANSPORT_TPG_TYPE_NORMAL);
+	ret = target_register_tpg(&usbg_fabric_configfs->tf_ops, wwn,
+				  &tpg->se_tpg, tpg,
+				  TRANSPORT_TPG_TYPE_NORMAL);
 	if (ret < 0) {
 		destroy_workqueue(tpg->workqueue);
 		kfree(tpg);
@@ -1589,7 +1589,7 @@ static void usbg_drop_tpg(struct se_portal_group *se_tpg)
 	struct usbg_tpg *tpg = container_of(se_tpg,
 				struct usbg_tpg, se_tpg);
 
-	core_tpg_deregister(se_tpg);
+	target_deregister_tpg(se_tpg);
 	destroy_workqueue(tpg->workqueue);
 	kfree(tpg);
 	the_only_tpg_I_currently_have = NULL;

@@ -2155,8 +2155,8 @@ vhost_scsi_make_tpg(struct se_wwn *wwn,
 	tpg->tport = tport;
 	tpg->tport_tpgt = tpgt;
 
-	ret = core_tpg_register(&vhost_scsi_fabric_configfs->tf_ops, wwn,
-				&tpg->se_tpg, tpg, TRANSPORT_TPG_TYPE_NORMAL);
+	ret = target_register_tpg(&vhost_scsi_fabric_configfs->tf_ops, wwn,
+				  &tpg->se_tpg, tpg, TRANSPORT_TPG_TYPE_NORMAL);
 	if (ret < 0) {
 		kfree(tpg);
 		return NULL;
@@ -2183,7 +2183,7 @@ static void vhost_scsi_drop_tpg(struct se_portal_group *se_tpg)
 	/*
 	 * Deregister the se_tpg from TCM..
 	 */
-	core_tpg_deregister(se_tpg);
+	target_deregister_tpg(se_tpg);
 	kfree(tpg);
 }
 

@@ -160,9 +160,9 @@ int	target_set_initiator_node_queue_depth(struct se_portal_group *,
 		unsigned char *, u32, int);
 int	target_set_initiator_node_tag(struct se_portal_group *,
 		struct se_node_acl *, const char *);
-int	core_tpg_register(struct target_core_fabric_ops *, struct se_wwn *,
+int	target_register_tpg(struct target_core_fabric_ops *, struct se_wwn *,
 		struct se_portal_group *, void *, int);
-int	core_tpg_deregister(struct se_portal_group *);
+int	target_deregister_tpg(struct se_portal_group *);
 
 /* SAS helpers */
 u8	sas_get_fabric_proto_ident(struct se_portal_group *);

@@ -2211,9 +2211,9 @@ static struct se_portal_group *sbp_make_tpg(
 		goto out_free_tpg;
 	}
 
-	ret = core_tpg_register(&sbp_fabric_configfs->tf_ops, wwn,
-			&tpg->se_tpg, (void *)tpg,
-			TRANSPORT_TPG_TYPE_NORMAL);
+	ret = target_register_tpg(&sbp_fabric_configfs->tf_ops, wwn,
+				  &tpg->se_tpg, (void *)tpg,
+				  TRANSPORT_TPG_TYPE_NORMAL);
 	if (ret < 0)
 		goto out_unreg_mgt_agt;
 
@@ -2232,7 +2232,7 @@ static void sbp_drop_tpg(struct se_portal_group *se_tpg)
 	struct sbp_tpg *tpg = container_of(se_tpg, struct sbp_tpg, se_tpg);
 	struct sbp_tport *tport = tpg->tport;
 
-	core_tpg_deregister(se_tpg);
+	target_deregister_tpg(se_tpg);
 	sbp_management_agent_unregister(tport->mgt_agt);
 	tport->tpg = NULL;
 	kfree(tpg);

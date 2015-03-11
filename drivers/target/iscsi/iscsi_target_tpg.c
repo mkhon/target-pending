@@ -68,7 +68,7 @@ int iscsit_load_discovery_tpg(void)
 		return -1;
 	}
 
-	ret = core_tpg_register(
+	ret = target_register_tpg(
 			&lio_target_fabric_configfs->tf_ops,
 			NULL, &tpg->tpg_se_tpg, tpg,
 			TRANSPORT_TPG_TYPE_DISCOVERY);
@@ -107,7 +107,7 @@ int iscsit_load_discovery_tpg(void)
 	return 0;
 out:
 	if (tpg->sid == 1)
-		core_tpg_deregister(&tpg->tpg_se_tpg);
+		target_deregister_tpg(&tpg->tpg_se_tpg);
 	kfree(tpg);
 	return -1;
 }
@@ -119,7 +119,7 @@ void iscsit_release_discovery_tpg(void)
 	if (!tpg)
 		return;
 
-	core_tpg_deregister(&tpg->tpg_se_tpg);
+	target_deregister_tpg(&tpg->tpg_se_tpg);
 
 	kfree(tpg);
 	iscsit_global->discovery_tpg = NULL;
@@ -289,7 +289,7 @@ int iscsit_tpg_del_portal_group(
 		tpg->param_list = NULL;
 	}
 
-	core_tpg_deregister(&tpg->tpg_se_tpg);
+	target_deregister_tpg(&tpg->tpg_se_tpg);
 
 	spin_lock(&tpg->tpg_state_lock);
 	tpg->tpg_state = TPG_STATE_FREE;

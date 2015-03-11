@@ -3851,8 +3851,9 @@ static struct se_portal_group *srpt_make_tpg(struct se_wwn *wwn,
 	int res;
 
 	/* Initialize sport->port_wwn and sport->port_tpg_1 */
-	res = core_tpg_register(&srpt_target->tf_ops, &sport->port_wwn,
-			&sport->port_tpg_1, sport, TRANSPORT_TPG_TYPE_NORMAL);
+	res = target_register_tpg(&srpt_target->tf_ops, &sport->port_wwn,
+				  &sport->port_tpg_1, sport,
+				  TRANSPORT_TPG_TYPE_NORMAL);
 	if (res)
 		return ERR_PTR(res);
 
@@ -3869,7 +3870,7 @@ static void srpt_drop_tpg(struct se_portal_group *tpg)
 				struct srpt_port, port_tpg_1);
 
 	sport->enabled = false;
-	core_tpg_deregister(&sport->port_tpg_1);
+	target_deregister_tpg(&sport->port_tpg_1);
 }
 
 /**

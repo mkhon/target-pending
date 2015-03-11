@@ -644,7 +644,7 @@ static int core_tpg_setup_virtual_lun0(struct se_portal_group *se_tpg)
 	return 0;
 }
 
-int core_tpg_register(
+int target_register_tpg(
 	struct target_core_fabric_ops *tfo,
 	struct se_wwn *se_wwn,
 	struct se_portal_group *se_tpg,
@@ -705,9 +705,9 @@ int core_tpg_register(
 
 	return 0;
 }
-EXPORT_SYMBOL(core_tpg_register);
+EXPORT_SYMBOL(target_register_tpg);
 
-int core_tpg_deregister(struct se_portal_group *se_tpg)
+int target_deregister_tpg(struct se_portal_group *se_tpg)
 {
 	struct se_node_acl *nacl, *nacl_tmp;
 	LIST_HEAD(node_list);
@@ -750,7 +750,7 @@ int core_tpg_deregister(struct se_portal_group *se_tpg)
 	array_free(se_tpg->tpg_lun_list, TRANSPORT_MAX_LUNS_PER_TPG);
 	return 0;
 }
-EXPORT_SYMBOL(core_tpg_deregister);
+EXPORT_SYMBOL(target_deregister_tpg);
 
 struct se_lun *core_tpg_alloc_lun(
 	struct se_portal_group *tpg,

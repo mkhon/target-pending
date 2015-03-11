@@ -1449,7 +1449,7 @@ static struct se_portal_group *lio_target_tiqn_addtpg(
 	if (!tpg)
 		return NULL;
 
-	ret = core_tpg_register(
+	ret = target_register_tpg(
 			&lio_target_fabric_configfs->tf_ops,
 			wwn, &tpg->tpg_se_tpg, tpg,
 			TRANSPORT_TPG_TYPE_NORMAL);
@@ -1465,7 +1465,7 @@ static struct se_portal_group *lio_target_tiqn_addtpg(
 			name);
 	return &tpg->tpg_se_tpg;
 out:
-	core_tpg_deregister(&tpg->tpg_se_tpg);
+	target_deregister_tpg(&tpg->tpg_se_tpg);
 	kfree(tpg);
 	return NULL;
 }

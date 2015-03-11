@@ -1234,9 +1234,9 @@ static struct se_portal_group *tcm_loop_make_naa_tpg(
 	/*
 	 * Register the tl_tpg as a emulated SAS TCM Target Endpoint
 	 */
-	ret = core_tpg_register(&tcm_loop_fabric_configfs->tf_ops,
-			wwn, &tl_tpg->tl_se_tpg, tl_tpg,
-			TRANSPORT_TPG_TYPE_NORMAL);
+	ret = target_register_tpg(&tcm_loop_fabric_configfs->tf_ops,
+				  wwn, &tl_tpg->tl_se_tpg, tl_tpg,
+				  TRANSPORT_TPG_TYPE_NORMAL);
 	if (ret < 0)
 		return ERR_PTR(-ENOMEM);
 
@@ -1265,7 +1265,7 @@ static void tcm_loop_drop_naa_tpg(
 	/*
 	 * Deregister the tl_tpg as a emulated SAS TCM Target Endpoint
 	 */
-	core_tpg_deregister(se_tpg);
+	target_deregister_tpg(se_tpg);
 
 	tl_tpg->tl_hba = NULL;
 	tl_tpg->tl_tpgt = 0;
