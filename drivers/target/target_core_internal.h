@@ -14,9 +14,9 @@ int	target_enable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
 int	target_disable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
 		u32, u32, struct se_node_acl *, struct se_portal_group *);
 void	target_clear_lun_from_tpg(struct se_lun *, struct se_portal_group *);
-int	core_dev_export(struct se_device *, struct se_portal_group *,
+int	target_dev_export(struct se_device *, struct se_portal_group *,
 		struct se_lun *);
-void	core_dev_unexport(struct se_device *, struct se_portal_group *,
+void	target_dev_unexport(struct se_device *, struct se_portal_group *,
 		struct se_lun *);
 struct se_lun *core_dev_add_lun(struct se_portal_group *, struct se_device *, u32);
 void	core_dev_del_lun(struct se_portal_group *, struct se_lun *);

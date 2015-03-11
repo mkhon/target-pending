@@ -795,7 +795,7 @@ int target_add_lun(
 	if (ret < 0)
 		return ret;
 
-	ret = core_dev_export(dev, tpg, lun);
+	ret = target_dev_export(dev, tpg, lun);
 	if (ret < 0) {
 		percpu_ref_exit(&lun->lun_ref);
 		return ret;
@@ -816,7 +816,7 @@ void target_remove_lun(
 	target_clear_lun_from_tpg(lun, tpg);
 	transport_clear_lun_ref(lun);
 
-	core_dev_unexport(lun->lun_se_dev, tpg, lun);
+	target_dev_unexport(lun->lun_se_dev, tpg, lun);
 
 	mutex_lock(&tpg->tpg_lun_mutex);
 	lun->lun_status = TRANSPORT_LUN_STATUS_FREE;

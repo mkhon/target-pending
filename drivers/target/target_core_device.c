@@ -486,7 +486,7 @@ void target_clear_lun_from_tpg(struct se_lun *lun, struct se_portal_group *tpg)
 	mutex_unlock(&tpg->acl_node_mutex);
 }
 
-static struct se_port *core_alloc_port(struct se_device *dev)
+static struct se_port *target_alloc_port(struct se_device *dev)
 {
 	struct se_port *port, *port_tmp;
 
@@ -538,7 +538,7 @@ again:
 	return port;
 }
 
-static void core_export_port(
+static void target_export_port(
 	struct se_device *dev,
 	struct se_portal_group *tpg,
 	struct se_port *port,
@@ -580,7 +580,7 @@ static void core_export_port(
 /*
  *	Called with struct se_device->se_port_lock spinlock held.
  */
-static void core_release_port(struct se_device *dev, struct se_port *port)
+static void target_release_port(struct se_device *dev, struct se_port *port)
 	__releases(&dev->se_port_lock) __acquires(&dev->se_port_lock)
 {
 	/*
@@ -599,7 +599,7 @@ static void core_release_port(struct se_device *dev, struct se_port *port)
 	kfree(port);
 }
 
-int core_dev_export(
+int target_dev_export(
 	struct se_device *dev,
 	struct se_portal_group *tpg,
 	struct se_lun *lun)
@@ -607,7 +607,7 @@ int core_dev_export(
 	struct se_hba *hba = dev->se_hba;
 	struct se_port *port;
 
-	port = core_alloc_port(dev);
+	port = target_alloc_port(dev);
 	if (IS_ERR(port))
 		return PTR_ERR(port);
 
@@ -617,11 +617,11 @@ int core_dev_export(
 	dev->export_count++;
 	spin_unlock(&hba->device_lock);
 
-	core_export_port(dev, tpg, port, lun);
+	target_export_port(dev, tpg, port, lun);
 	return 0;
 }
 
-void core_dev_unexport(
+void target_dev_unexport(
 	struct se_device *dev,
 	struct se_portal_group *tpg,
 	struct se_lun *lun)
@@ -637,7 +637,7 @@ void core_dev_unexport(
 	spin_unlock(&lun->lun_sep_lock);
 
 	spin_lock(&dev->se_port_lock);
-	core_release_port(dev, port);
+	target_release_port(dev, port);
 	spin_unlock(&dev->se_port_lock);
 
 	spin_lock(&hba->device_lock);
