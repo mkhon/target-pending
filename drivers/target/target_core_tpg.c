@@ -637,7 +637,7 @@ static int core_tpg_setup_virtual_lun0(struct se_portal_group *se_tpg)
 	spin_lock_init(&lun->lun_sep_lock);
 	init_completion(&lun->lun_ref_comp);
 
-	ret = core_tpg_add_lun(se_tpg, lun, lun_access, dev);
+	ret = target_add_lun(se_tpg, lun, lun_access, dev);
 	if (ret < 0)
 		return ret;
 
@@ -744,7 +744,7 @@ int target_deregister_tpg(struct se_portal_group *se_tpg)
 	}
 
 	if (se_tpg->se_tpg_type == TRANSPORT_TPG_TYPE_NORMAL)
-		core_tpg_remove_lun(se_tpg, &se_tpg->tpg_virt_lun0);
+		target_remove_lun(se_tpg, &se_tpg->tpg_virt_lun0);
 
 	se_tpg->se_tpg_fabric_ptr = NULL;
 	array_free(se_tpg->tpg_lun_list, TRANSPORT_MAX_LUNS_PER_TPG);
@@ -782,7 +782,7 @@ struct se_lun *core_tpg_alloc_lun(
 	return lun;
 }
 
-int core_tpg_add_lun(
+int target_add_lun(
 	struct se_portal_group *tpg,
 	struct se_lun *lun,
 	u32 lun_access,
@@ -809,11 +809,11 @@ int core_tpg_add_lun(
 	return 0;
 }
 
-void core_tpg_remove_lun(
+void target_remove_lun(
 	struct se_portal_group *tpg,
 	struct se_lun *lun)
 {
-	core_clear_lun_from_tpg(lun, tpg);
+	target_clear_lun_from_tpg(lun, tpg);
 	transport_clear_lun_ref(lun);
 
 	core_dev_unexport(lun->lun_se_dev, tpg, lun);

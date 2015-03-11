@@ -13,7 +13,7 @@ int	core_enable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
 		u32, u32, struct se_node_acl *, struct se_portal_group *);
 int	core_disable_device_list_for_node(struct se_lun *, struct se_lun_acl *,
 		u32, u32, struct se_node_acl *, struct se_portal_group *);
-void	core_clear_lun_from_tpg(struct se_lun *, struct se_portal_group *);
+void	target_clear_lun_from_tpg(struct se_lun *, struct se_portal_group *);
 int	core_dev_export(struct se_device *, struct se_portal_group *,
 		struct se_lun *);
 void	core_dev_unexport(struct se_device *, struct se_portal_group *,
@@ -53,9 +53,9 @@ struct se_node_acl *__target_get_initiator_node_acl(struct se_portal_group *tpg,
 void	core_tpg_add_node_to_devs(struct se_node_acl *, struct se_portal_group *);
 void	core_tpg_wait_for_nacl_pr_ref(struct se_node_acl *);
 struct se_lun *core_tpg_alloc_lun(struct se_portal_group *, u32);
-int	core_tpg_add_lun(struct se_portal_group *, struct se_lun *,
+int	target_add_lun(struct se_portal_group *, struct se_lun *,
 		u32, struct se_device *);
-void core_tpg_remove_lun(struct se_portal_group *, struct se_lun *);
+void target_remove_lun(struct se_portal_group *, struct se_lun *);
 
 /* target_core_transport.c */
 extern struct kmem_cache *se_tmr_req_cache;

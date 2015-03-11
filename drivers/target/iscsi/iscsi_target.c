@@ -995,8 +995,8 @@ int iscsit_setup_scsi_cmd(struct iscsi_conn *conn, struct iscsi_cmd *cmd,
 
 	target_get_sess_cmd(conn->sess->se_sess, &cmd->se_cmd, true);
 
-	cmd->sense_reason = transport_lookup_cmd_lun(&cmd->se_cmd,
-						     scsilun_to_int(&hdr->lun));
+	cmd->sense_reason = target_lookup_cmd_lun(&cmd->se_cmd,
+						  scsilun_to_int(&hdr->lun));
 	if (cmd->sense_reason)
 		goto attach_cmd;
 
@@ -1857,8 +1857,8 @@ iscsit_handle_task_mgt_cmd(struct iscsi_conn *conn, struct iscsi_cmd *cmd,
 	 * Locate the struct se_lun for all TMRs not related to ERL=2 TASK_REASSIGN
 	 */
 	if (function != ISCSI_TM_FUNC_TASK_REASSIGN) {
-		ret = transport_lookup_tmr_lun(&cmd->se_cmd,
-					       scsilun_to_int(&hdr->lun));
+		ret = target_lookup_tmr_lun(&cmd->se_cmd,
+					    scsilun_to_int(&hdr->lun));
 		if (ret < 0) {
 			se_tmr->response = ISCSI_TMF_RSP_NO_LUN;
 			goto attach;

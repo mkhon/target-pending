@@ -111,7 +111,7 @@ void	transport_deregister_session(struct se_session *);
 
 void	transport_init_se_cmd(struct se_cmd *, struct target_core_fabric_ops *,
 		struct se_session *, u32, int, int, unsigned char *);
-sense_reason_t transport_lookup_cmd_lun(struct se_cmd *, u32);
+sense_reason_t target_lookup_cmd_lun(struct se_cmd *, u32);
 sense_reason_t target_setup_cmd_from_cdb(struct se_cmd *, unsigned char *);
 int	target_submit_cmd_map_sgls(struct se_cmd *, struct se_session *,
 		unsigned char *, unsigned char *, u32, u32, int, int, int,
@@ -146,7 +146,7 @@ void	core_tmr_release_req(struct se_tmr_req *);
 int	transport_generic_handle_tmr(struct se_cmd *);
 void	transport_generic_request_failure(struct se_cmd *, sense_reason_t);
 void	__target_execute_cmd(struct se_cmd *);
-int	transport_lookup_tmr_lun(struct se_cmd *, u32);
+int	target_lookup_tmr_lun(struct se_cmd *, u32);
 
 struct se_node_acl *target_get_initiator_node_acl(struct se_portal_group *tpg,
 		unsigned char *);

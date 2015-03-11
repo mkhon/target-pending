@@ -271,7 +271,7 @@ static int tcm_loop_issue_tmr(struct tcm_loop_tpg *tl_tpg,
 	/*
 	 * Locate the underlying TCM struct se_lun
 	 */
-	if (transport_lookup_tmr_lun(se_cmd, lun) < 0) {
+	if (target_lookup_tmr_lun(se_cmd, lun) < 0) {
 		ret = TMR_LUN_DOES_NOT_EXIST;
 		goto release;
 	}

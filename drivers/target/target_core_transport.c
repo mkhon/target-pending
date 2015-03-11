@@ -1398,7 +1398,7 @@ int target_submit_cmd_map_sgls(struct se_cmd *se_cmd, struct se_session *se_sess
 	/*
 	 * Locate se_lun pointer and attach it to struct se_cmd
 	 */
-	rc = transport_lookup_cmd_lun(se_cmd, unpacked_lun);
+	rc = target_lookup_cmd_lun(se_cmd, unpacked_lun);
 	if (rc) {
 		transport_send_check_condition_and_sense(se_cmd, rc, 0);
 		target_put_sess_cmd(se_sess, se_cmd);
@@ -1558,7 +1558,7 @@ int target_submit_tmr(struct se_cmd *se_cmd, struct se_session *se_sess,
 		return ret;
 	}
 
-	ret = transport_lookup_tmr_lun(se_cmd, unpacked_lun);
+	ret = target_lookup_tmr_lun(se_cmd, unpacked_lun);
 	if (ret) {
 		/*
 		 * For callback during failure handling, push this work off

@@ -616,7 +616,7 @@ static void scsiback_device_action(struct vscsibk_pend *pending_req,
 
 	se_cmd->se_tmr_req->ref_task_tag = tag;
 
-	if (transport_lookup_tmr_lun(se_cmd, pending_req->v2p->lun) < 0)
+	if (target_lookup_tmr_lun(se_cmd, pending_req->v2p->lun) < 0)
 		goto out;
 
 	transport_generic_handle_tmr(se_cmd);

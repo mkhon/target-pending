@@ -55,7 +55,7 @@ static struct se_hba *lun0_hba;
 struct se_device *g_lun0_dev;
 
 sense_reason_t
-transport_lookup_cmd_lun(struct se_cmd *se_cmd, u32 unpacked_lun)
+target_lookup_cmd_lun(struct se_cmd *se_cmd, u32 unpacked_lun)
 {
 	struct se_lun *se_lun = NULL;
 	struct se_session *se_sess = se_cmd->se_sess;
@@ -147,9 +147,9 @@ check_lun:
 
 	return 0;
 }
-EXPORT_SYMBOL(transport_lookup_cmd_lun);
+EXPORT_SYMBOL(target_lookup_cmd_lun);
 
-int transport_lookup_tmr_lun(struct se_cmd *se_cmd, u32 unpacked_lun)
+int target_lookup_tmr_lun(struct se_cmd *se_cmd, u32 unpacked_lun)
 {
 	struct se_dev_entry *deve;
 	struct se_lun *se_lun = NULL;
@@ -200,7 +200,7 @@ check_lun:
 
 	return 0;
 }
-EXPORT_SYMBOL(transport_lookup_tmr_lun);
+EXPORT_SYMBOL(target_lookup_tmr_lun);
 
 /*
  * This function is called from core_scsi3_emulate_pro_register_and_move()
@@ -456,11 +456,11 @@ int core_disable_device_list_for_node(
 	return 0;
 }
 
-/*      core_clear_lun_from_tpg():
+/*      target_clear_lun_from_tpg():
  *
  *
  */
-void core_clear_lun_from_tpg(struct se_lun *lun, struct se_portal_group *tpg)
+void target_clear_lun_from_tpg(struct se_lun *lun, struct se_portal_group *tpg)
 {
 	struct se_node_acl *nacl;
 	struct se_dev_entry *deve;
@@ -1211,7 +1211,7 @@ struct se_lun *core_dev_add_lun(
 	if (IS_ERR(lun))
 		return lun;
 
-	rc = core_tpg_add_lun(tpg, lun,
+	rc = target_add_lun(tpg, lun,
 				TRANSPORT_LUNFLAGS_READ_WRITE, dev);
 	if (rc < 0)
 		return ERR_PTR(rc);
@@ -1254,7 +1254,7 @@ void core_dev_del_lun(
 		tpg->se_tpg_tfo->tpg_get_tag(tpg), lun->unpacked_lun,
 		tpg->se_tpg_tfo->get_fabric_name());
 
-	core_tpg_remove_lun(tpg, lun);
+	target_remove_lun(tpg, lun);
 }
 
 struct se_lun *core_get_lun_from_tpg(struct se_portal_group *tpg, u32 unpacked_lun)
