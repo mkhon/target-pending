@@ -634,12 +634,22 @@ static void pscsi_transport_complete(struct se_cmd *cmd, struct scatterlist *sg,
 	 * Hack to make sure that Write-Protect modepage is set if R/O mode is
 	 * forced.
 	 */
-	if (!cmd->se_deve || !cmd->data_length)
+	if (!cmd->data_length)
 		goto after_mode_sense;
 
 	if (((cdb[0] == MODE_SENSE) || (cdb[0] == MODE_SENSE_10)) &&
 	     (status_byte(result) << 1) == SAM_STAT_GOOD) {
-		if (cmd->se_deve->lun_flags & TRANSPORT_LUNFLAGS_READ_ONLY) {
+		struct se_session *sess = cmd->se_sess;
+		struct se_dev_entry *deve;
+		u32 lun = cmd->orig_fe_lun;
+		bool read_only;
+
+		rcu_read_lock();
+		deve = rcu_dereference(sess->se_node_acl->lun_entry_hlist[lun]);
+		read_only = (deve->lun_flags & TRANSPORT_LUNFLAGS_READ_ONLY);
+		rcu_read_unlock();
+
+		if (read_only) {
 			unsigned char *buf;
 
 			buf = transport_kmap_data_sg(cmd);
