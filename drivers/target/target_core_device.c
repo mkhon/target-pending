@@ -217,18 +217,23 @@ struct se_dev_entry *core_get_se_deve_from_rtpi(
 	struct se_portal_group *tpg = nacl->se_tpg;
 	u32 i;
 
-	spin_lock_irq(&nacl->device_list_lock);
 	for (i = 0; i < TRANSPORT_MAX_LUNS_PER_TPG; i++) {
-		deve = nacl->device_list[i];
-
-		if (!(deve->lun_flags & TRANSPORT_LUNFLAGS_INITIATOR_ACCESS))
+		rcu_read_lock();
+		deve = rcu_dereference(nacl->lun_entry_hlist[i]);
+		if (!deve) {
+			rcu_read_unlock();
 			continue;
-
+		}
+		if (!(deve->lun_flags & TRANSPORT_LUNFLAGS_INITIATOR_ACCESS)) {
+			rcu_read_unlock();
+			continue;
+		}
 		lun = deve->se_lun;
 		if (!lun) {
 			pr_err("%s device entries device pointer is"
 				" NULL, but Initiator has access.\n",
 				tpg->se_tpg_tfo->get_fabric_name());
+			rcu_read_unlock();
 			continue;
 		}
 		port = lun->lun_sep;
@@ -236,17 +241,18 @@ struct se_dev_entry *core_get_se_deve_from_rtpi(
 			pr_err("%s device entries device pointer is"
 				" NULL, but Initiator has access.\n",
 				tpg->se_tpg_tfo->get_fabric_name());
+			rcu_read_unlock();
 			continue;
 		}
-		if (port->sep_rtpi != rtpi)
+		if (port->sep_rtpi != rtpi) {
+			rcu_read_unlock();
 			continue;
-
-		atomic_inc_mb(&deve->pr_ref_count);
-		spin_unlock_irq(&nacl->device_list_lock);
+		}
+		percpu_ref_get(&deve->pr_ref);
+		rcu_read_unlock();
 
 		return deve;
 	}
-	spin_unlock_irq(&nacl->device_list_lock);
 
 	return NULL;
 }
@@ -312,6 +318,13 @@ void core_update_device_list_access(
 	synchronize_rcu();
 }
 
+static void target_pr_ref_release(struct percpu_ref *ref)
+{
+	struct se_dev_entry *deve = container_of(ref, struct se_dev_entry,
+						 pr_ref);
+	complete(&deve->pr_comp);
+}
+
 /*      core_enable_device_list_for_node():
  *
  *
@@ -351,6 +364,9 @@ int core_enable_device_list_for_node(
 		synchronize_rcu();
 		return 0;
 	}
+
+	percpu_ref_init(&deve->pr_ref, target_pr_ref_release, 0, GFP_KERNEL);
+	init_completion(&deve->pr_comp);
 
 	deve->mapped_lun = mapped_lun;
 	deve->lun_flags |= TRANSPORT_LUNFLAGS_INITIATOR_ACCESS;
@@ -412,13 +428,6 @@ int core_disable_device_list_for_node(
 	list_del(&deve->alua_port_list);
 	spin_unlock_bh(&port->sep_alua_lock);
 	/*
-	 * Wait for any in process SPEC_I_PT=1 or REGISTER_AND_MOVE
-	 * PR operation to complete.
-	 */
-	while (atomic_read(&deve->pr_ref_count) != 0)
-		cpu_relax();
-
-	/*
 	 * Disable struct se_dev_entry LUN ACL mapping
 	 */
 	spin_lock_irq(&nacl->lun_entry_lock);
@@ -431,7 +440,18 @@ int core_disable_device_list_for_node(
 	spin_unlock_irq(&nacl->lun_entry_lock);
 	rcu_read_unlock();
 
+	/*
+	 * Wait for RCU read critical sections to complete after
+	 * se_deve pointer reassignments.
+	 */
 	synchronize_rcu();
+	/*
+	 * Wait for any in process SPEC_I_PT=1 or REGISTER_AND_MOVE
+	 * PR operation to complete.
+	 */
+	percpu_ref_kill(&deve->pr_ref);
+	wait_for_completion(&deve->pr_comp);
+	percpu_ref_exit(&deve->pr_ref);
 
 	core_scsi3_free_pr_reg_from_nacl(lun->lun_se_dev, nacl);
 	return 0;

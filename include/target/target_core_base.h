@@ -664,7 +664,8 @@ struct se_dev_entry {
 	u64			write_bytes;
 	atomic_t		ua_count;
 	/* Used for PR SPEC_I_PT=1 and REGISTER_AND_MOVE */
-	atomic_t		pr_ref_count;
+	struct percpu_ref	pr_ref;
+	struct completion	pr_comp;
 	struct se_lun_acl	*se_lun_acl;
 	spinlock_t		ua_lock;
 	struct se_lun		*se_lun;
