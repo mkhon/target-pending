@@ -234,15 +234,15 @@ static int core_create_device_list_for_node(struct se_node_acl *nacl)
 	struct se_dev_entry *deve;
 	int i;
 
-	nacl->device_list = array_zalloc(TRANSPORT_MAX_LUNS_PER_TPG,
+	nacl->lun_entry_hlist = array_zalloc(TRANSPORT_MAX_LUNS_PER_TPG,
 			sizeof(struct se_dev_entry), GFP_KERNEL);
-	if (!nacl->device_list) {
+	if (!nacl->lun_entry_hlist) {
 		pr_err("Unable to allocate memory for"
-			" struct se_node_acl->device_list\n");
+			" struct se_node_acl->lun_entry_hlist\n");
 		return -ENOMEM;
 	}
 	for (i = 0; i < TRANSPORT_MAX_LUNS_PER_TPG; i++) {
-		deve = nacl->device_list[i];
+		deve = nacl->lun_entry_hlist[i];
 
 		atomic_set(&deve->ua_count, 0);
 		atomic_set(&deve->pr_ref_count, 0);
@@ -281,6 +281,7 @@ struct se_node_acl *core_tpg_check_initiator_node_acl(
 	init_completion(&acl->acl_free_comp);
 	spin_lock_init(&acl->device_list_lock);
 	spin_lock_init(&acl->nacl_sess_lock);
+	spin_lock_init(&acl->lun_entry_lock);
 	atomic_set(&acl->acl_pr_ref_count, 0);
 	acl->queue_depth = tpg->se_tpg_tfo->tpg_get_default_depth(tpg);
 	snprintf(acl->initiatorname, TRANSPORT_IQN_LEN, "%s", initiatorname);
@@ -408,6 +409,7 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 	init_completion(&acl->acl_free_comp);
 	spin_lock_init(&acl->device_list_lock);
 	spin_lock_init(&acl->nacl_sess_lock);
+	spin_lock_init(&acl->lun_entry_lock);
 	atomic_set(&acl->acl_pr_ref_count, 0);
 	acl->queue_depth = queue_depth;
 	snprintf(acl->initiatorname, TRANSPORT_IQN_LEN, "%s", initiatorname);
