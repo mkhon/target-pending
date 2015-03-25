@@ -432,6 +432,7 @@ int core_disable_device_list_for_node(
 	 */
 	spin_lock_irq(&nacl->lun_entry_lock);
 	core_scsi3_ua_release_all(deve);
+	rcu_assign_pointer(deve->pr_reg, NULL);
 	rcu_assign_pointer(deve->se_lun, NULL);
 	rcu_assign_pointer(deve->se_lun_acl, NULL);
 	deve->lun_flags = 0;
