@@ -13,6 +13,8 @@
 #include <linux/miscdevice.h>
 #include <asm/unaligned.h>
 #include <scsi/scsi_proto.h>
+#include <scsi/scsi_proto.h>
+#include <uapi/linux/vhost.h>
 
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
@@ -132,6 +134,8 @@ vhost_nvme_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	long ret = 0;
 
 	switch (cmd) {
+	case VHOST_SET_MEM_TABLE:
+		break;
 	default:
 		ret = -ENOTTY;
 		break;

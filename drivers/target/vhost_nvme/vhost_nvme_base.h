@@ -21,6 +21,7 @@ struct vhost_nvme_tport {
 
 struct vhost_nvme_hba {
 	bool active;
+	struct vhost_memory __rcu *memory;
 };
 
 /*

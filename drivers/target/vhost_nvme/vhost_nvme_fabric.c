@@ -6,6 +6,7 @@
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <asm/unaligned.h>
+#include <uapi/linux/vhost.h>
 #include <scsi/scsi_common.h>
 #include <scsi/scsi_proto.h>
 #include <target/target_core_base.h>
