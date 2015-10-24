@@ -134,6 +134,9 @@ vhost_nvme_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	long ret = 0;
 
 	switch (cmd) {
+	case VHOST_NVME_IOC_EVENTFD:
+		ret = vhost_nvme_ioc_eventfd(hba, arg);
+		break;
 	case VHOST_SET_MEM_TABLE:
 		break;
 	default:

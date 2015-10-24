@@ -21,11 +21,30 @@ struct vhost_nvme_tport {
 
 struct vhost_nvme_hba {
 	bool active;
+
+	struct vhost_nvme_tpg *tpg;
+
+	struct file *irqfd;
+	struct eventfd_ctx *irqfd_ctx;
+	struct mm_struct *mm;
 	struct vhost_memory __rcu *memory;
 };
+
+struct vhost_nvme_eventfd {
+	int irqfd;
+} __attribute__ ((packed));
+
+#define VHOST_NVME_IOC_EVENTFD	_IOWR('M', 4, struct vhost_nvme_eventfd)
+#define VHOST_NVME_IOC_ENDPOINT	_IOWR('M', 5, unsigned long)
+#define VHOST_NVME_IOC_FRAME	_IOWR('M', 6, unsigned long)
 
 /*
  * From vhost_nvme_mem.c
  */
 long vhost_nvme_set_memory(struct vhost_nvme_hba *,
                            struct vhost_memory __user *);
+
+/*
+ * From vhost_nvme_ioctl.c
+ */
+long vhost_nvme_ioc_eventfd(struct vhost_nvme_hba *, unsigned long);
