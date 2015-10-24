@@ -1,4 +1,4 @@
-#define VHOST_NVME_VERSION  "v0.1"
+#define VHOST_NVME_VERSION  "v0.01"
 #define VHOST_NVME_NAMELEN 32
 
 struct vhost_nvme_tpg {

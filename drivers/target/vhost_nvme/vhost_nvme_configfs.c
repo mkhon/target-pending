@@ -10,6 +10,7 @@
 #include <linux/string.h>
 #include <linux/configfs.h>
 #include <linux/ctype.h>
+#include <linux/miscdevice.h>
 #include <asm/unaligned.h>
 #include <scsi/scsi_proto.h>
 
@@ -124,14 +125,52 @@ static const struct target_core_fabric_ops vhost_nvme_ops = {
 	.fabric_drop_tpg		= vhost_nvme_drop_tpg,
 };
 
+static const struct file_operations vhost_nvme_fops = {
+	.owner		= THIS_MODULE,
+#if 0
+	.release	= vhost_nvme_release,
+	.unlocked_ioctl	= vhost_nvme_ioctl,
+	.open		= vhost_nvme_open,
+	.write		= vhost_nvme_write,
+#endif
+	.llseek		= noop_llseek,
+};
+
+static struct miscdevice vhost_nvme_misc = {
+	.minor		= MISC_DYNAMIC_MINOR,
+	.name		= "vhost_nvme",
+	.fops		= &vhost_nvme_fops,
+};
+
 static int __init vhost_nvme_init(void)
 {
-	return target_register_template(&vhost_nvme_ops);
+	int ret;
+
+	pr_debug("VHOST_NVME fabric module %s on %s/%s"
+		" on "UTS_RELEASE"\n", VHOST_NVME_VERSION, utsname()->sysname,
+		utsname()->machine);
+
+	ret = misc_register(&vhost_nvme_misc);
+	if (ret < 0) {
+		pr_err("misc_register() failed for vhost_nvme_misc: %d\n", ret);
+		return ret;
+	}
+
+	ret = target_register_template(&vhost_nvme_ops);
+	if (ret)
+		goto err_misc_unregister;
+
+	return 0;
+
+err_misc_unregister:
+	misc_deregister(&vhost_nvme_misc);
+	return ret;
 };
 
 static void __exit vhost_nvme_exit(void)
 {
 	target_unregister_template(&vhost_nvme_ops);
+	misc_deregister(&vhost_nvme_misc);
 };
 
 MODULE_DESCRIPTION("VHOST_NVME series fabric driver");
