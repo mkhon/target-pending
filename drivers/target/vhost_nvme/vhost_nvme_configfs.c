@@ -125,11 +125,28 @@ static const struct target_core_fabric_ops vhost_nvme_ops = {
 	.fabric_drop_tpg		= vhost_nvme_drop_tpg,
 };
 
+static long
+vhost_nvme_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
+{
+	struct vhost_nvme_hba *hba = f->private_data;
+	long ret = 0;
+
+	switch (cmd) {
+	default:
+		ret = -ENOTTY;
+		break;
+	}
+
+	return ret;
+}
+
 static const struct file_operations vhost_nvme_fops = {
 	.owner		= THIS_MODULE,
 #if 0
 	.release	= vhost_nvme_release,
+#endif
 	.unlocked_ioctl	= vhost_nvme_ioctl,
+#if 0
 	.open		= vhost_nvme_open,
 	.write		= vhost_nvme_write,
 #endif
