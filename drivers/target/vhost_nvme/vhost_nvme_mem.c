@@ -81,3 +81,26 @@ long vhost_nvme_set_memory(struct vhost_nvme_hba *hba,
 	return 0;
 }
 
+const struct vhost_memory_region *
+vhost_nvme_find_region(struct vhost_nvme_hba *hba, __u64 addr, __u32 len)
+{
+	struct vhost_memory *mem;
+	struct vhost_memory_region *reg;
+	int i;
+
+	if (!hba->memory)
+		return NULL;
+
+	mem = rcu_dereference(hba->memory);
+	/*
+	 * linear search is not brilliant, but we really have on the order of 6
+	 * regions in practice
+	 */
+	for (i = 0; i < mem->nregions; ++i) {
+		reg = mem->regions + i;
+		if (reg->guest_phys_addr <= addr &&
+		    reg->guest_phys_addr + reg->memory_size - 1 >= addr)
+			return reg;
+	}
+	return NULL;
+}

@@ -46,6 +46,8 @@ struct vhost_nvme_eventfd {
  */
 long vhost_nvme_set_memory(struct vhost_nvme_hba *,
                            struct vhost_memory __user *);
+const struct vhost_memory_region *vhost_nvme_find_region(struct vhost_nvme_hba *
+							  __u64, __u32);
 
 /*
  * From vhost_nvme_ioctl.c
