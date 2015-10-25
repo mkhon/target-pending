@@ -153,6 +153,12 @@ out:
 	return err;
 }
 
+static long
+vhost_nvme_ioc_cc_frame(struct vhost_nvme_hba *hba, unsigned long arg)
+{
+	return 0;
+}
+
 static ssize_t
 vhost_nvme_write(struct file *f, const char __user *buf,
 		 size_t nbytes, loff_t *ppos)
@@ -178,6 +184,9 @@ vhost_nvme_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case VHOST_NVME_IOC_EVENTFD:
 		ret = vhost_nvme_ioc_eventfd(hba, arg);
+		break;
+	case VHOST_NVME_IOC_CC_FRAME:
+		ret = vhost_nvme_ioc_cc_frame(hba, arg);
 		break;
 	case VHOST_SET_MEM_TABLE:
 		ret = vhost_nvme_set_memory(hba, (void *)arg);

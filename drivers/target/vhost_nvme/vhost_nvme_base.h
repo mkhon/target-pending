@@ -39,7 +39,8 @@ struct vhost_nvme_eventfd {
 
 #define VHOST_NVME_IOC_EVENTFD	_IOWR('M', 4, struct vhost_nvme_eventfd)
 #define VHOST_NVME_IOC_ENDPOINT	_IOWR('M', 5, unsigned long)
-#define VHOST_NVME_IOC_FRAME	_IOWR('M', 6, unsigned long)
+#define VHOST_NVME_IOC_CC_FRAME	_IOWR('M', 6, unsigned long)
+#define VHOST_NVME_IOC_Q_FRAME	_IOWR('M', 7, unsigned long)
 
 /*
  * From vhost_nvme_mem.c
