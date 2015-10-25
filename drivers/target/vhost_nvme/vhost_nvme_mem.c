@@ -82,7 +82,7 @@ long vhost_nvme_set_memory(struct vhost_nvme_hba *hba,
 }
 
 const struct vhost_memory_region *
-vhost_nvme_find_region(struct vhost_nvme_hba *hba, __u64 addr, __u32 len)
+vhost_find_region(struct vhost_nvme_hba *hba, __u64 addr, __u32 len)
 {
 	struct vhost_memory *mem;
 	struct vhost_memory_region *reg;
@@ -103,4 +103,35 @@ vhost_nvme_find_region(struct vhost_nvme_hba *hba, __u64 addr, __u32 len)
 			return reg;
 	}
 	return NULL;
+}
+
+static bool vhost_check_region_boundary(const struct vhost_memory_region *reg,
+					uint64_t addr, size_t len)
+{
+	unsigned long max_size;
+
+	max_size = reg->memory_size - addr + reg->guest_phys_addr;
+	return (max_size < len);
+}
+
+static void __user *vhost_map_to_region(const struct vhost_memory_region *reg,
+					uint64_t addr)
+{
+	return (void __user *)(unsigned long)
+		(reg->userspace_addr + addr - reg->guest_phys_addr);
+}
+
+void __user *vhost_map_guest_to_host(struct vhost_nvme_hba *hba,
+				     uint64_t addr, int size)
+{
+	const struct vhost_memory_region *reg;
+
+	reg = vhost_find_region(hba, addr, size);
+	if (unlikely(!reg))
+		return ERR_PTR(-EPERM);
+
+	if (unlikely(vhost_check_region_boundary(reg, addr, size)))
+		return ERR_PTR(-EFAULT);
+
+	return vhost_map_to_region(reg, addr);
 }
