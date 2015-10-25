@@ -19,3 +19,23 @@
 #include <target/target_core_backend.h>
 
 #include "vhost_nvme_base.h"
+
+int vhost_nvme_create_cq(struct vhost_nvme_hba *hba)
+{
+	return 0;
+}
+
+void vhost_nvme_delete_cq(struct vhost_nvme_hba *hba)
+{
+	return;
+}
+
+int vhost_nvme_create_sq(struct vhost_nvme_hba *hba)
+{
+	return 0;
+}
+
+void vhost_nvme_delete_sq(struct vhost_nvme_hba *hba)
+{
+	return;
+}
