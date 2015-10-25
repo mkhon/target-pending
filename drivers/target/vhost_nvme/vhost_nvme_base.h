@@ -26,12 +26,15 @@ struct vhost_nvme_hba {
 
 	struct file *irqfd;
 	struct eventfd_ctx *irqfd_ctx;
+	struct file *doorbell_fd;
+	struct eventfd_ctx *doorbell_ctx;
 	struct mm_struct *mm;
 	struct vhost_memory __rcu *memory;
 };
 
 struct vhost_nvme_eventfd {
 	int irqfd;
+	int doorbellfd;
 } __attribute__ ((packed));
 
 #define VHOST_NVME_IOC_EVENTFD	_IOWR('M', 4, struct vhost_nvme_eventfd)
@@ -47,4 +50,6 @@ long vhost_nvme_set_memory(struct vhost_nvme_hba *,
 /*
  * From vhost_nvme_ioctl.c
  */
-long vhost_nvme_ioc_eventfd(struct vhost_nvme_hba *, unsigned long);
+#include <linux/miscdevice.h>
+
+extern struct miscdevice vhost_nvme_misc;
