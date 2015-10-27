@@ -2045,7 +2045,7 @@ static void give_back_ep(struct usb_ep **pep)
 	ep->driver_data = NULL;
 }
 
-static int usbg_bind(struct usb_configuration *c, struct usb_function *f)
+static int tcm_bind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_uas		*fu = to_f_uas(f);
 	struct usb_gadget	*gadget = c->cdev->gadget;
@@ -2118,7 +2118,7 @@ ep_fail:
 	return -ENOTSUPP;
 }
 
-static void usbg_unbind(struct usb_configuration *c, struct usb_function *f)
+static void tcm_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_uas *fu = to_f_uas(f);
 
@@ -2132,7 +2132,7 @@ struct guas_setup_wq {
 	unsigned int alt;
 };
 
-static void usbg_delayed_set_alt(struct work_struct *wq)
+static void tcm_delayed_set_alt(struct work_struct *wq)
 {
 	struct guas_setup_wq *work = container_of(wq, struct guas_setup_wq,
 			work);
@@ -2153,7 +2153,7 @@ static void usbg_delayed_set_alt(struct work_struct *wq)
 	usb_composite_setup_continue(fu->function.config->cdev);
 }
 
-static int usbg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
+static int tcm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct f_uas *fu = to_f_uas(f);
 
@@ -2163,7 +2163,7 @@ static int usbg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		work = kmalloc(sizeof(*work), GFP_ATOMIC);
 		if (!work)
 			return -ENOMEM;
-		INIT_WORK(&work->work, usbg_delayed_set_alt);
+		INIT_WORK(&work->work, tcm_delayed_set_alt);
 		work->fu = fu;
 		work->alt = alt;
 		schedule_work(&work->work);
@@ -2172,7 +2172,7 @@ static int usbg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	return -EOPNOTSUPP;
 }
 
-static void usbg_disable(struct usb_function *f)
+static void tcm_disable(struct usb_function *f)
 {
 	struct f_uas *fu = to_f_uas(f);
 
@@ -2183,7 +2183,7 @@ static void usbg_disable(struct usb_function *f)
 	fu->flags = 0;
 }
 
-static int usbg_setup(struct usb_function *f,
+static int tcm_setup(struct usb_function *f,
 		const struct usb_ctrlrequest *ctrl)
 {
 	struct f_uas *fu = to_f_uas(f);
@@ -2194,7 +2194,7 @@ static int usbg_setup(struct usb_function *f,
 	return usbg_bot_setup(f, ctrl);
 }
 
-static int usbg_cfg_bind(struct usb_configuration *c)
+static int tcm_bind_config(struct usb_configuration *c)
 {
 	struct f_uas *fu;
 	int ret;
@@ -2203,11 +2203,11 @@ static int usbg_cfg_bind(struct usb_configuration *c)
 	if (!fu)
 		return -ENOMEM;
 	fu->function.name = "Target Function";
-	fu->function.bind = usbg_bind;
-	fu->function.unbind = usbg_unbind;
-	fu->function.set_alt = usbg_set_alt;
-	fu->function.setup = usbg_setup;
-	fu->function.disable = usbg_disable;
+	fu->function.bind = tcm_bind;
+	fu->function.unbind = tcm_unbind;
+	fu->function.set_alt = tcm_set_alt;
+	fu->function.setup = tcm_setup;
+	fu->function.disable = tcm_disable;
 	fu->function.strings = tcm_strings;
 	fu->tpg = the_only_tpg_I_currently_have;
 
@@ -2241,7 +2241,7 @@ static int usb_target_bind(struct usb_composite_dev *cdev)
 		usbg_us_strings[USB_G_STR_CONFIG].id;
 
 	ret = usb_add_config(cdev, &usbg_config_driver,
-			usbg_cfg_bind);
+			tcm_bind_config);
 	if (ret)
 		return ret;
 	usb_composite_overwrite_options(cdev, &coverwrite);
