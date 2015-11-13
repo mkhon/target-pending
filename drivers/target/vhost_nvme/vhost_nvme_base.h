@@ -24,6 +24,10 @@ struct vhost_nvme_hba {
 
 	struct vhost_nvme_tpg *tpg;
 
+	void *cq_queue_ptr;
+	int cq_pgcount;
+	struct page **cq_pages;
+
 	struct file *irqfd;
 	struct eventfd_ctx *irqfd_ctx;
 	struct file *doorbell_fd;
