@@ -54,7 +54,21 @@ int vhost_nvme_create_cq(struct vhost_nvme_hba *hba)
 
 void vhost_nvme_delete_cq(struct vhost_nvme_hba *hba)
 {
-	return;
+	int i;
+
+	if (hba->cq_queue_ptr) {
+		vunmap(hba->cq_queue_ptr);
+		hba->cq_queue_ptr = NULL;
+	}
+
+	for (i = 0; i < hba->cq_pgcount; i++) {
+		put_page(hba->cq_pages[i]);
+	}
+	hba->cq_pgcount = 0;
+	if (hba->cq_pages) {
+		kfree(hba->cq_pages);
+		hba->cq_pages = NULL;
+	}
 }
 
 int vhost_nvme_create_sq(struct vhost_nvme_hba *hba)
