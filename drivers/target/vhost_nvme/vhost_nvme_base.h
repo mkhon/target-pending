@@ -36,6 +36,26 @@ struct vhost_nvme_hba {
 	struct vhost_memory __rcu *memory;
 };
 
+struct vhost_nvme_controller {
+	struct se_session *se_sess;
+};
+
+struct vhost_nvme_cmd {
+	u64 context;
+
+	void __user *pa;
+	void *hwi_frame_ptr;
+	struct page *hwi_frame_page[2];
+
+	struct scatterlist *sgl;
+	size_t sgl_size;
+
+	struct vhost_nvme_controller *ctrl;
+
+	struct se_cmd cmd;
+	struct work_struct work;
+};
+
 struct vhost_nvme_eventfd {
 	int irqfd;
 	int doorbellfd;
@@ -54,6 +74,11 @@ long vhost_nvme_set_memory(struct vhost_nvme_hba *,
 const struct vhost_memory_region *vhost_find_region(struct vhost_nvme_hba *,
 						    __u64, __u32);
 void __user *vhost_map_guest_to_host(struct vhost_nvme_hba *, uint64_t, int);
+
+/*
+ * From vhost_nvme_hwi.c
+ */
+int vhost_nvme_hwi_queue(struct vhost_nvme_hba *, u8 __user *, u8);
 
 /*
  * From vhost_nvme_ioctl.c
