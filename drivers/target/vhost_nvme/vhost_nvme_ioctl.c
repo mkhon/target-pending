@@ -156,6 +156,20 @@ out:
 static long
 vhost_nvme_ioc_cc_frame(struct vhost_nvme_hba *hba, unsigned long arg)
 {
+	void *frame_addr;
+	size_t frame_size = 0xffff; // XXX: Fixme
+	u8 status;
+
+        if (!hba->tpg) {
+		pr_err("vhost_nvme_ioc_cc_frame no valid tpg\n");
+		return -ENODEV;
+	}
+	frame_addr = vhost_map_guest_to_host(hba, 0, 0);
+	status = vhost_nvme_handle_frame(hba, frame_addr, 0);
+#if 0
+	if (status == NVME_INVALID_STATUS)
+		return -EAGAIN;
+#endif
 	return 0;
 }
 
