@@ -25,3 +25,17 @@ enum NvmeCcMask {
 #define NVME_CC_SHN(cc)    ((cc >> CC_SHN_SHIFT)    & CC_SHN_MASK)
 #define NVME_CC_IOSQES(cc) ((cc >> CC_IOSQES_SHIFT) & CC_IOSQES_MASK)
 #define NVME_CC_IOCQES(cc) ((cc >> CC_IOCQES_SHIFT) & CC_IOCQES_MASK)
+
+typedef struct NvmeBar {
+    uint64_t    cap;
+    uint32_t    vs;
+    uint32_t    intms;
+    uint32_t    intmc;
+    uint32_t    cc;
+    uint32_t    rsvd1;
+    uint32_t    csts;
+    uint32_t    nssrc;
+    uint32_t    aqa;
+    uint64_t    asq;
+    uint64_t    acq;
+} NvmeBar;

@@ -1,6 +1,8 @@
 #define VHOST_NVME_VERSION  "v0.01"
 #define VHOST_NVME_NAMELEN 32
 
+#include "vhost_nvme_hwi.h"
+
 struct vhost_nvme_tpg {
 	/* SAS port target portal group tag for TCM */
 	u16 tport_tpgt;
@@ -34,6 +36,8 @@ struct vhost_nvme_hba {
 	struct eventfd_ctx *doorbell_ctx;
 	struct mm_struct *mm;
 	struct vhost_memory __rcu *memory;
+
+	struct NvmeBar bar;
 };
 
 struct vhost_nvme_controller {

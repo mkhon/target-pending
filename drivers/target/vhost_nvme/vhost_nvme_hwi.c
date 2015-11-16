@@ -33,6 +33,7 @@ vhost_nvme_hwi_work(struct work_struct *work)
 {
 	struct vhost_nvme_cmd *cmd = container_of(work,
 				struct vhost_nvme_cmd, work);
+	struct vhost_nvme_hba *hba = cmd->hba;
 	u8 addr = 0xff; // XXX: FIXME
 	uint64_t data = 0xffffffff; // XXX: FIXME
 	int rc;
@@ -51,21 +52,21 @@ vhost_nvme_hwi_work(struct work_struct *work)
 		 *
 		 * XXX: Need to check existing CC state..?
 		 */
-		if (!NVME_CC_EN(data) && !NVME_CC_EN(n->bar.cc) &&
-		    !NVME_CC_SHN(data) && !NVME_CC_SHN(n->bar.cc)) {
-			n->bar.cc = data;
+		if (!NVME_CC_EN(data) && !NVME_CC_EN(hba->bar.cc) &&
+		    !NVME_CC_SHN(data) && !NVME_CC_SHN(hba->bar.cc)) {
+			hba->bar.cc = data;
 		}
 		/*
 		 * Check NVME_CC_EN state to determine if configuration
 		 * controller needs initial NVMe-HI setup, or explicit
 		 * cleanup for vhost PCIe MSI-X device.
 		 */
-		if (NVME_CC_EN(data) && !NVME_CC_EN(n->bar.cc)) {
+		if (NVME_CC_EN(data) && !NVME_CC_EN(hba->bar.cc)) {
 			// vhost_nvme_start_cc();
-		} else if (!NVME_CC_EN(data) && NVME_CC_EN(n->bar.cc)) {
+		} else if (!NVME_CC_EN(data) && NVME_CC_EN(hba->bar.cc)) {
 			// vhost_nvme_clear_cc();
 		}
-		if (NVME_CC_SHN(data) && !(NVME_CC_SHN(n->bar.cc))) {
+		if (NVME_CC_SHN(data) && !(NVME_CC_SHN(hba->bar.cc))) {
 			// vhost_nvme_clear_cc();
 		}
 		break;
