@@ -164,9 +164,9 @@ vhost_nvme_ioc_cc_frame(struct vhost_nvme_hba *hba, unsigned long arg)
 		pr_err("vhost_nvme_ioc_cc_frame no valid tpg\n");
 		return -ENODEV;
 	}
-	frame_addr = vhost_map_guest_to_host(hba, 0, 0);
-	status = vhost_nvme_handle_frame(hba, frame_addr, 0);
-#if 0
+	frame_addr = vhost_map_guest_to_host(hba, frame_size, 0);
+#if 0 // XXX: Fixme
+	status = vhost_nvme_hwi_queue(hba, frame_addr, 0);
 	if (status == NVME_INVALID_STATUS)
 		return -EAGAIN;
 #endif
@@ -178,7 +178,7 @@ vhost_nvme_write(struct file *f, const char __user *buf,
 		 size_t nbytes, loff_t *ppos)
 {
 	struct vhost_nvme_hba *hba = f->private_data;
-	int ret;
+	int ret = -ENOSYS;
 
 	if (!hba->tpg) {
 		pr_err("vhost_nvme_write no valid tpg\n");
@@ -186,7 +186,7 @@ vhost_nvme_write(struct file *f, const char __user *buf,
 	}
 
 	// FIXME: fill in vhost_nvme_write
-	return -ENOSYS;
+	return ret;
 }
 
 static long
